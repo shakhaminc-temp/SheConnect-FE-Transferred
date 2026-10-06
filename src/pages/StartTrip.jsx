@@ -75,6 +75,11 @@ const StartTrip = () => {
                                 error = "Please enter Metro line/name (text only)";
                             }
                             break;
+                        case 'bus':
+                            if (!/^[0-9]+$/.test(cleanValue)) {
+                                error = "Enter bus number (digits only)";
+                            }
+                            break;
                         default:
                             if (value.trim().length < 3) error = "Enter valid ID (min 3 chars)";
                             break;
@@ -98,6 +103,8 @@ const StartTrip = () => {
                 return "e.g. 12123 or Deccan Queen (optional)";
             case 'metro':
                 return "e.g. Blue Line or Pink Line (optional)";
+            case 'bus':
+                return "e.g. 123 (optional)";
             default:
                 return "Vehicle/ID number (optional)";
         }
@@ -349,7 +356,7 @@ const StartTrip = () => {
                                                 required
                                             >
                                                 <option value="">Choose your mode</option>
-                                                <option value="car">Car Pool</option>
+                                                <option value="car">Car</option>
                                                 <option value="bus">Public Bus</option>
                                                 <option value="train">Railway</option>
                                                 <option value="uber/cab">Uber / Ola / Cab</option>

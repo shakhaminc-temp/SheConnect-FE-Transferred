@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getChatMessages } from '../services/chatService'; // Correct import
 
-const useChatWebSocket = (partnerUserId) => {
+const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => {
     const [messages, setMessages] = useState([]);
     const [isTyping, setIsTyping] = useState(false);
     const [partnerLocation, setPartnerLocation] = useState(null);
     const [isConnected, setIsConnected] = useState(false);
+    const [emergencyAlert, setEmergencyAlert] = useState(null);
 
     const wsRef = useRef(null);
     const reconnectTimeoutRef = useRef(null);
@@ -25,7 +26,7 @@ const useChatWebSocket = (partnerUserId) => {
 
         const loadHistory = async () => {
             try {
-                const chatHistory = await getChatMessages(partnerUserId, 50, 0); // Use correct function
+                const chatHistory = await getChatMessages(partnerUserId, requestId, 50, 0); // Use correct function
                 const sorted = chatHistory.messages.sort(
                     (a, b) => new Date(a.created_at) - new Date(b.created_at)
                 );
@@ -40,7 +41,7 @@ const useChatWebSocket = (partnerUserId) => {
 
     // Connect WebSocket
     const connect = useCallback(() => {
-        if (!partnerUserId) return;
+        if (!partnerUserId || readOnly) return;
         if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
         const token = sessionStorage.getItem('token');
@@ -91,6 +92,10 @@ const useChatWebSocket = (partnerUserId) => {
                         if (String(data.senderId) === String(partnerUserId))
                             setPartnerLocation({ lat: data.lat, lng: data.lng, timestamp: data.timestamp });
                         break;
+                    case 'emergency':
+                        if (String(data.senderId) === String(partnerUserId))
+                            setEmergencyAlert(data);
+                        break;
                     default:
                         break;
                 }
@@ -129,7 +134,7 @@ const useChatWebSocket = (partnerUserId) => {
             if (wsRef.current?.readyState !== WebSocket.OPEN) return false;
 
             const placeholderId = 'temp-' + Date.now();
-            const payload = { type: 'message', receiverId: partnerUserId, message: trimmed, placeholderId };
+            const payload = { type: 'message', receiverId: partnerUserId, message: trimmed, placeholderId, request_id: requestId };
             wsRef.current.send(JSON.stringify(payload));
 
             setMessages((prev) => [
@@ -177,7 +182,17 @@ const useChatWebSocket = (partnerUserId) => {
         [partnerUserId]
     );
 
-    return { messages, isTyping, partnerLocation, isConnected, sendMessage, sendTyping, markAsRead };
+    const sendEmergency = useCallback(() => {
+        if (wsRef.current?.readyState !== WebSocket.OPEN) return false;
+        wsRef.current.send(JSON.stringify({ type: 'emergency', receiverId: partnerUserId }));
+        return true;
+    }, [partnerUserId]);
+
+    return { 
+        messages, isTyping, partnerLocation, isConnected, 
+        sendMessage, sendTyping, markAsRead,
+        emergencyAlert, setEmergencyAlert, sendEmergency
+    };
 };
 
 export default useChatWebSocket;

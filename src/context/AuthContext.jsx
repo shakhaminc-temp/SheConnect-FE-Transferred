@@ -16,10 +16,13 @@ export const AuthProvider = ({ children }) => {
         try {
             const response = await getProfile();
             setUser(response.data);
+            return response.data;
         } catch (error) {
             console.error("Failed to fetch profile:", error);
             sessionStorage.removeItem('token');
             setUser(null);
+            const errorDetail = error.response?.data?.detail || error.message || "Unknown error";
+            throw new Error(`Profile fetch failed: ${errorDetail}`);
         } finally {
             setLoading(false);
         }

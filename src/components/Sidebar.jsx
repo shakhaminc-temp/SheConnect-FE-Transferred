@@ -8,6 +8,8 @@ import {
     Settings,
     LogOut,
     X,
+    Car,
+    MessageSquare
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTrip } from '../context/TripContext';
@@ -15,11 +17,13 @@ import { useTrip } from '../context/TripContext';
 const Sidebar = ({ isOpen, onClose }) => {
     const { logout } = useAuth();
     const location = useLocation();
-    const { hasActiveTrip } = useTrip();
+    const { hasActiveTrip, endTrip } = useTrip();
 
     const menuItems = [
         { path: '/home', icon: Home, label: 'Home' },
         { path: '/start-trip', icon: MapPin, label: 'Start Trip', indicator: hasActiveTrip },
+        { path: '/carpooling', icon: Car, label: 'Carpooling', badge: 'New' },
+        { path: '/chat-history', icon: MessageSquare, label: 'Chat History' },
         { path: '/blogs', icon: FileText, label: 'Blogs' },
         { path: '/profile', icon: User, label: 'Profile' },
         { path: '/settings', icon: Settings, label: 'Settings' },
@@ -92,7 +96,16 @@ const Sidebar = ({ isOpen, onClose }) => {
 
                     <div className="pt-4 border-t border-gray-50 px-2 pb-6">
                         <button
-                            onClick={logout}
+                            onClick={async () => {
+                                if (hasActiveTrip) {
+                                    try {
+                                        await endTrip();
+                                    } catch (err) {
+                                        console.error("Failed to end trip on logout", err);
+                                    }
+                                }
+                                logout();
+                            }}
                             className="w-full flex items-center space-x-3.5 px-4 py-3.5 rounded-2xl text-gray-400 hover:bg-rose-50 hover:text-rose-600 transition-all duration-200 group"
                         >
                             <LogOut size={22} className="group-hover:translate-x-0.5 transition-transform" />

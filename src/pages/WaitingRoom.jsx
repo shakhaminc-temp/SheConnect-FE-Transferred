@@ -23,6 +23,7 @@ import {
     EyeOff,
     Inbox,
     X,
+    Star,
 } from 'lucide-react';
 import { useTrip, TRIP_STATUS } from '../context/TripContext';
 
@@ -260,7 +261,15 @@ const WaitingRoom = () => {
                                                 {req.fromName?.charAt(0) || '?'}
                                             </div>
                                             <div>
-                                                <h4 className="text-base font-black text-gray-900">{req.fromName}</h4>
+                                                <div className="flex items-center gap-2">
+                                                    <h4 className="text-base font-black text-gray-900">{req.fromName}</h4>
+                                                    {req.rating && (
+                                                        <div className="flex items-center gap-1 bg-yellow-50 px-2 py-0.5 rounded-lg border border-yellow-100">
+                                                            <Star size={10} className="fill-yellow-400 text-yellow-500" />
+                                                            <span className="text-[10px] font-bold text-yellow-700">{req.rating}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
                                                 <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 font-bold mt-1">
                                                     <span className="flex items-center gap-1">
                                                         <MapPin size={12} className="text-pink-500" />
@@ -322,6 +331,12 @@ const WaitingRoom = () => {
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <h4 className="text-base font-black text-gray-900">{user.name}</h4>
                                                     {user.verified && <span className="w-2 h-2 rounded-full bg-green-500"></span>}
+                                                    {user.rating && (
+                                                        <div className="flex items-center gap-1 bg-yellow-50 px-2 py-0.5 rounded-lg border border-yellow-100">
+                                                            <Star size={10} className="fill-yellow-400 text-yellow-500" />
+                                                            <span className="text-[10px] font-bold text-yellow-700">{user.rating}</span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400 font-bold">
                                                     <div className="flex items-center gap-1 text-pink-600 bg-pink-50 px-2 py-0.5 rounded-lg">

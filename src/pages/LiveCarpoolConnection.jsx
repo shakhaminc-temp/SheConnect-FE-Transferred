@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import MapLibreMap from '../components/MapLibre';
 import {
@@ -23,31 +23,22 @@ import {
     X,
     Car,
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { useTrip, TRIP_STATUS } from '../context/TripContext';
+import api from '../api/axios';
 import { getCoordsFromLocation } from '../utils/getCoordsFromLocation';
+import { rateRide, completeRide } from '../services/carpoolService';
 import Chatroom from '../components/Chatroom';
 import useChatWebSocket from '../hooks/useChatWebSocket';
 
-const LiveConnection = () => {
-    const { loading: authLoading } = useAuth();
+const LiveCarpoolConnection = () => {
     const navigate = useNavigate();
-    const {
-        tripStatus,
-        activeTrip,
-        connectedPartner,
-        privacyChoice,
-        endTrip,
-        revertToWaiting,
-        emergencyAction,
-        pressWeMet,
-        pressIReached,
-        weMet,
-        iReached,
-        bothMet,
-        bothReached,
-        partnerEndedTrip,
-    } = useTrip();
+    const location = useLocation();
+    
+    // Expecting state: { ride, partner, role }
+    // role: 'rider' | 'driver'
+    const state = location.state || {};
+    const ride = state.ride;
+    const partner = state.partner;
+    const role = state.role || 'rider';
 
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [startCoords, setStartCoords] = useState(null);
@@ -55,6 +46,16 @@ const LiveConnection = () => {
     const [distance, setDistance] = useState(null);
     const [loading, setLoading] = useState(true);
     const [isChatOpen, setIsChatOpen] = useState(false);
+
+    // Simulated Trip States (like normal SheConnect)
+    const [weMet, setWeMet] = useState({ me: false, partner: false });
+    const [iReached, setIReached] = useState({ me: false, partner: false });
+    const bothMet = weMet.me && weMet.partner;
+    const bothReached = iReached.me && iReached.partner;
+    const [partnerEndedTrip, setPartnerEndedTrip] = useState(false);
+
+    const pressWeMet = () => setWeMet(prev => ({ ...prev, me: true, partner: true }));
+    const pressIReached = () => setIReached(prev => ({ ...prev, me: true, partner: true }));
 
     // Modals
     const [showEndConfirm, setShowEndConfirm] = useState(false);
@@ -64,21 +65,14 @@ const LiveConnection = () => {
     const [feedbackRating, setFeedbackRating] = useState(0);
     const [feedbackText, setFeedbackText] = useState('');
 
-    const chatState = useChatWebSocket(connectedPartner?.id, connectedPartner?.request_id, false);
+    const chatState = useChatWebSocket(partner?.id || partner?.user_id, partner?.request_id, false);
 
-    // Redirect if not connected
+    // Redirect if no ride context
     useEffect(() => {
-        if (tripStatus !== TRIP_STATUS.CONNECTED || !connectedPartner) {
-            if (!authLoading) {
-                const timer = setTimeout(() => {
-                    if (tripStatus !== TRIP_STATUS.CONNECTED) {
-                        navigate('/home', { replace: true });
-                    }
-                }, 500);
-                return () => clearTimeout(timer);
-            }
+        if (!ride || !partner) {
+            navigate('/carpooling', { replace: true });
         }
-    }, [tripStatus, connectedPartner, authLoading, navigate]);
+    }, [ride, partner, navigate]);
 
     // Both reached → open feedback form
     useEffect(() => {
@@ -86,13 +80,6 @@ const LiveConnection = () => {
             setShowFeedback(true);
         }
     }, [bothReached]);
-
-    // Partner ended trip → show notification
-    useEffect(() => {
-        if (partnerEndedTrip && !showPartnerLeft) {
-            setShowPartnerLeft(true);
-        }
-    }, [partnerEndedTrip]);
 
     // Haversine
     const calculateDistance = (coords1, coords2) => {
@@ -110,7 +97,7 @@ const LiveConnection = () => {
 
     // Fetch coords after both met
     useEffect(() => {
-        if (!connectedPartner || !activeTrip) return;
+        if (!ride) return;
         if (!bothMet) {
             setLoading(false);
             return;
@@ -118,8 +105,8 @@ const LiveConnection = () => {
         async function fetchCoordinates() {
             try {
                 const [routeStart, routeEnd] = await Promise.all([
-                    getCoordsFromLocation(activeTrip.start),
-                    getCoordsFromLocation(activeTrip.end)
+                    getCoordsFromLocation(ride.start_location),
+                    getCoordsFromLocation(ride.end_location)
                 ]);
                 setStartCoords(routeStart);
                 setEndCoords(routeEnd);
@@ -133,54 +120,46 @@ const LiveConnection = () => {
             }
         }
         fetchCoordinates();
-    }, [connectedPartner, activeTrip, bothMet]);
+    }, [ride, bothMet]);
 
 
 
     const handleEndTrip = () => {
-        endTrip();
-        navigate('/home');
+        navigate(role === 'driver' ? '/offer-ride' : '/carpooling');
     };
 
-    const handleFeedbackSubmit = () => {
-        // In production: send feedback to API
-        setShowFeedback(false);
-        
-        // Show carpool promo if they had a good experience, else end directly
-        if (feedbackRating >= 3) {
-            setShowCarpoolPromo(true);
-        } else {
-            endTrip();
-            navigate('/home');
+    const handleFeedbackSubmit = async () => {
+        try {
+            if (role === 'rider') {
+                await rateRide(ride.ride_id, feedbackRating, feedbackText);
+            } else if (role === 'driver') {
+                await completeRide(ride.ride_id);
+            }
+            
+            // Locally mark this ride as completed so the Start Trip buttons don't keep showing up
+            const completedRides = JSON.parse(localStorage.getItem('completedCarpools') || '[]');
+            if (!completedRides.includes(ride.ride_id)) {
+                completedRides.push(ride.ride_id);
+                localStorage.setItem('completedCarpools', JSON.stringify(completedRides));
+            }
+        } catch (err) {
+            console.error("Feedback error", err);
         }
-    };
-
-    const handleCarpoolExplore = () => {
-        setShowCarpoolPromo(false);
-        endTrip();
+        
+        setShowFeedback(false);
         navigate('/carpooling');
     };
 
-    const handleCarpoolDecline = () => {
-        setShowCarpoolPromo(false);
-        endTrip();
-        navigate('/home');
+    const emergencyAction = () => {
+        const success = chatState.sendEmergency();
+        if (success) {
+            alert("Emergency Alert sent to your partner!");
+        } else {
+            alert("Failed to send alert. Connection lost.");
+        }
     };
 
-    const handlePartnerLeftOk = () => {
-        setShowPartnerLeft(false);
-        endTrip();
-        navigate('/home');
-    };
-
-    // Go back to Waiting Room with the same trip
-    const handlePartnerLeftWaiting = () => {
-        setShowPartnerLeft(false);
-        revertToWaiting(); // Keeps trip, clears connection data
-        navigate('/waiting-room');
-    };
-
-    if (authLoading || loading) {
+    if (loading) {
         return (
             <div className="flex h-screen items-center justify-center bg-white font-sans">
                 <div className="w-16 h-16 border-4 border-pink-100 border-t-pink-600 rounded-full animate-spin"></div>
@@ -188,20 +167,7 @@ const LiveConnection = () => {
         );
     }
 
-    if (!connectedPartner) {
-        return (
-            <div className="flex h-screen items-center justify-center bg-[#f8fafc] font-sans p-4">
-                <div className="bg-white p-8 rounded-[32px] shadow-2xl border border-gray-100 text-center max-w-sm">
-                    <AlertCircle size={48} className="mx-auto text-rose-500 mb-4" />
-                    <h3 className="text-xl font-black text-gray-900 mb-2">No Active Connection</h3>
-                    <p className="text-gray-500 font-medium mb-6">Please find a partner first.</p>
-                    <button onClick={() => navigate('/home')} className="w-full py-4 bg-gray-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest">
-                        Back to Home
-                    </button>
-                </div>
-            </div>
-        );
-    }
+    if (!ride || !partner) return null;
 
     return (
         <div className="flex h-screen bg-[#f8fafc] font-sans text-gray-900">
@@ -218,27 +184,6 @@ const LiveConnection = () => {
 
                 <div className="max-w-6xl mx-auto p-6 md:p-10 space-y-6">
 
-                    {/* ── Notification Banners ── */}
-                    {weMet.partner && !weMet.me && (
-                        <div className="bg-green-50 border border-green-200 p-5 rounded-2xl flex items-center gap-4 animate-pulse">
-                            <Bell size={24} className="text-green-600 shrink-0" />
-                            <div>
-                                <p className="text-sm font-black text-green-800">Your partner pressed "We Met"!</p>
-                                <p className="text-xs text-green-600 font-medium">Press the "We Met" button below to confirm you've met.</p>
-                            </div>
-                        </div>
-                    )}
-
-                    {bothMet && iReached.partner && !iReached.me && (
-                        <div className="bg-blue-50 border border-blue-200 p-5 rounded-2xl flex items-center gap-4 animate-pulse">
-                            <Bell size={24} className="text-blue-600 shrink-0" />
-                            <div>
-                                <p className="text-sm font-black text-blue-800">Your partner pressed "I Reached"!</p>
-                                <p className="text-xs text-blue-600 font-medium">Press "I Reached" to confirm your arrival at the destination.</p>
-                            </div>
-                        </div>
-                    )}
-
                     {/* ── Status Banner ── */}
                     <div className="flex flex-col md:flex-row items-center justify-between gap-6 bg-white p-6 sm:p-8 rounded-[32px] shadow-sm border border-gray-100 relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-pink-100 rounded-full blur-3xl -mr-16 -mt-16 opacity-30"></div>
@@ -250,7 +195,7 @@ const LiveConnection = () => {
                             </div>
                             <div>
                                 <h2 className="text-2xl font-black tracking-tight">
-                                    {bothMet ? 'Trip in Progress! 🚀' : 'Coordinate Meeting 🤝'}
+                                    {bothMet ? 'Carpool in Progress! 🚀' : 'Coordinate Meeting 🤝'}
                                 </h2>
                                 <p className="text-gray-400 font-medium text-sm mt-1">
                                     {bothMet
@@ -307,7 +252,7 @@ const LiveConnection = () => {
 
                             {/* Emergency */}
                             {/* <button
-                                onClick={() => chatState.sendEmergency()}
+                                onClick={emergencyAction}
                                 className="px-6 py-4 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-700 transition-all flex items-center gap-2 shadow-[0_8px_16px_-4px_rgba(225,29,72,0.3)]"
                             >
                                 <AlertCircle size={16} /> SOS
@@ -326,7 +271,7 @@ const LiveConnection = () => {
                                             <span className="text-xs font-black uppercase tracking-widest text-gray-700">Active Route</span>
                                         </div>
                                     </div>
-                                    <MapLibreMap startCoords={startCoords} endCoords={endCoords} />
+                                    <MapLibreMap startCoords={startCoords} endCoords={endCoords} showSOS={false} />
                                 </div>
                             ) : (
                                 <div className="bg-white p-16 rounded-3xl border border-dashed border-gray-200 text-center space-y-4 h-[450px] flex flex-col items-center justify-center">
@@ -355,34 +300,26 @@ const LiveConnection = () => {
                         <div className="space-y-6">
                             {/* Chatroom */}
                             {isChatOpen ? (
-                                <Chatroom partner={connectedPartner} onClose={() => setIsChatOpen(false)} chatState={chatState} />
+                                <Chatroom partner={partner} onClose={() => setIsChatOpen(false)} chatState={chatState} />
                             ) : (
                                 <>
                                     {/* Partner Card */}
                                     <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden group">
                                         <div className="absolute top-0 right-0 w-20 h-20 bg-gray-50 rounded-full blur-2xl -mr-10 -mt-10 group-hover:bg-pink-50 transition-colors"></div>
                                         <h3 className="text-base font-black text-gray-900 mb-4 flex items-center gap-2">
-                                            Partner Profile <div className="w-1 h-1 rounded-full bg-pink-600"></div>
+                                            {role === 'driver' ? 'Rider Profile' : 'Driver Profile'} <div className="w-1 h-1 rounded-full bg-pink-600"></div>
                                         </h3>
 
                                         <div className="flex items-center gap-4 mb-6">
                                             <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center text-pink-600 font-black text-2xl border border-gray-100 shadow-inner group-hover:bg-pink-50 transition-colors">
-                                                {connectedPartner.privacy_type === 'details' ? connectedPartner.name?.charAt(0) : '?'}
+                                                {partner.name?.charAt(0) || '?'}
                                             </div>
                                             <div>
-                                                <h4 className="text-lg font-black text-gray-900 tracking-tight">
-                                                    {connectedPartner.name || (connectedPartner.anonymous_id ? `Traveler ${connectedPartner.anonymous_id.substring(0,4)}` : 'Anonymous Traveler')}
-                                                </h4>
+                                                <h4 className="text-lg font-black text-gray-900 tracking-tight">{partner.name || 'Partner'}</h4>
                                                 <div className="flex items-center gap-2 mt-1">
-                                                    {connectedPartner.privacy_type === 'details' ? (
-                                                        <span className="text-xs bg-pink-100 text-pink-600 font-black px-2 py-0.5 rounded-full uppercase tracking-widest">
-                                                            {connectedPartner.college || 'Verified'}
-                                                        </span>
-                                                    ) : (
-                                                        <div className="flex items-center gap-1.5 text-xs text-amber-600 font-bold">
-                                                            <EyeOff size={12} /><span>Anonymous ID Only</span>
-                                                        </div>
-                                                    )}
+                                                    <span className="text-xs bg-pink-100 text-pink-600 font-black px-2 py-0.5 rounded-full uppercase tracking-widest">
+                                                        {partner.college || 'Verified'}
+                                                    </span>
                                                 </div>
                                             </div>
                                         </div>
@@ -392,24 +329,15 @@ const LiveConnection = () => {
                                                 <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 shrink-0"><MapPin size={16} /></div>
                                                 <div>
                                                     <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Route</p>
-                                                    <p className="text-sm font-bold text-gray-700">{connectedPartner.start} → {connectedPartner.end}</p>
+                                                    <p className="text-sm font-bold text-gray-700">{ride.start_location?.split(',')[0]} → {ride.end_location?.split(',')[0]}</p>
                                                 </div>
                                             </div>
-                                            {connectedPartner.privacy_type === 'details' && connectedPartner.phone && (
+                                            {partner.phone && (
                                                 <div className="flex items-start gap-3">
                                                     <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 shrink-0"><Phone size={16} /></div>
                                                     <div>
                                                         <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Contact</p>
-                                                        <p className="text-sm font-bold text-gray-700">{connectedPartner.phone}</p>
-                                                    </div>
-                                                </div>
-                                            )}
-                                            {connectedPartner.privacy_type === 'details' && connectedPartner.college && (
-                                                <div className="flex items-start gap-3">
-                                                    <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 shrink-0"><GraduationCap size={16} /></div>
-                                                    <div>
-                                                        <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">College</p>
-                                                        <p className="text-sm font-bold text-gray-700">{connectedPartner.college}</p>
+                                                        <p className="text-sm font-bold text-gray-700">{partner.phone}</p>
                                                     </div>
                                                 </div>
                                             )}
@@ -423,30 +351,11 @@ const LiveConnection = () => {
                                                 <MessageCircle size={16} /> Chat
                                             </button>
                                             <button
-                                                onClick={() => {
-                                                    const success = chatState.sendEmergency();
-                                                    if (success) alert("Emergency Alert sent to your partner!");
-                                                    else alert("Failed to send alert. Connection lost.");
-                                                }}
+                                                onClick={emergencyAction}
                                                 className="flex-1 py-3 bg-rose-600 text-white rounded-xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-rose-700 transition-colors"
                                             >
                                                 <AlertCircle size={16} /> Emergency
                                             </button>
-                                        </div>
-                                    </div>
-
-                                    {/* My Sharing Status */}
-                                    <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 border-dashed">
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">My Visibility</p>
-                                                {privacyChoice === 'details' ? (
-                                                    <div className="flex items-center gap-1.5 text-xs font-black text-pink-600"><Eye size={12} /> Sharing Full Details</div>
-                                                ) : (
-                                                    <div className="flex items-center gap-1.5 text-xs font-black text-blue-600"><Shield size={12} /> Anonymous Mode</div>
-                                                )}
-                                            </div>
-                                            <Shield className={privacyChoice === 'details' ? 'text-pink-200' : 'text-blue-400'} size={20} />
                                         </div>
                                     </div>
 
@@ -462,13 +371,13 @@ const LiveConnection = () => {
                                                     <div className="w-3 h-3 rounded-full bg-blue-500"></div>
                                                 </div>
                                                 <div className="flex flex-col justify-between py-0.5">
-                                                    <div className="text-sm font-black">{activeTrip?.start}</div>
-                                                    <div className="text-sm font-black">{activeTrip?.end}</div>
+                                                    <div className="text-sm font-black">{ride.start_location?.split(',')[0]}</div>
+                                                    <div className="text-sm font-black">{ride.end_location?.split(',')[0]}</div>
                                                 </div>
                                             </div>
                                             <div className="flex items-center justify-between pt-3 border-t border-white/10">
                                                 <div className="text-xs font-bold text-white/40 uppercase tracking-widest">Transport</div>
-                                                <div className="text-xs font-black text-pink-400 uppercase tracking-widest capitalize">{activeTrip?.mode}</div>
+                                                <div className="text-xs font-black text-pink-400 uppercase tracking-widest capitalize">Carpool</div>
                                             </div>
                                         </div>
                                     </div>
@@ -507,36 +416,6 @@ const LiveConnection = () => {
                                 className="flex-1 py-4 bg-red-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-red-700 transition-all shadow-[0_8px_16px_-4px_rgba(220,38,38,0.3)]"
                             >
                                 Yes, End Trip
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* ── Partner Left Notification ── */}
-            {showPartnerLeft && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl space-y-5">
-                        <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto">
-                            <AlertTriangle size={36} className="text-amber-600" />
-                        </div>
-                        <h3 className="text-xl font-black text-gray-900">Partner Ended the Trip</h3>
-                        <p className="text-gray-500 font-medium text-sm">
-                            Your travel partner has ended this trip. Would you like to go back to the Waiting Room with the same trip and find another partner, or go Home?
-                        </p>
-                        <div className="flex gap-3 pt-1">
-                            <button
-                                onClick={handlePartnerLeftOk}
-                                className="flex-1 py-4 bg-gray-100 text-gray-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 transition-all"
-                            >
-                                Go Home
-                            </button>
-                            <button
-                                onClick={handlePartnerLeftWaiting}
-                                className="flex-1 py-4 bg-gray-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:shadow-2xl transition-all group relative overflow-hidden"
-                            >
-                                <div className="absolute inset-0 bg-gradient-to-r from-pink-600 to-rose-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                <span className="relative">Waiting Room</span>
                             </button>
                         </div>
                     </div>
@@ -586,15 +465,6 @@ const LiveConnection = () => {
                                     </button>
                                 ))}
                             </div>
-                            {feedbackRating > 0 && (
-                                <p className="text-xs text-gray-400 font-bold mt-2">
-                                    {feedbackRating === 1 && 'Poor'}
-                                    {feedbackRating === 2 && 'Fair'}
-                                    {feedbackRating === 3 && 'Good'}
-                                    {feedbackRating === 4 && 'Great'}
-                                    {feedbackRating === 5 && 'Excellent!'}
-                                </p>
-                            )}
                         </div>
 
                         {/* Feedback Text */}
@@ -614,49 +484,14 @@ const LiveConnection = () => {
                         {/* Submit */}
                         <button
                             onClick={handleFeedbackSubmit}
-                            disabled={feedbackRating === 0}
-                            className={`w-full py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ${feedbackRating > 0
+                            disabled={role === 'rider' && feedbackRating === 0}
+                            className={`w-full py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ${role === 'driver' || feedbackRating > 0
                                 ? 'bg-gray-900 text-white hover:shadow-2xl'
                                 : 'bg-gray-100 text-gray-300 cursor-not-allowed'
                                 }`}
                         >
                             Submit & Finish
                         </button>
-                    </div>
-                </div>
-            )}
-
-            {/* ── Carpool Promo Modal ── */}
-            {showCarpoolPromo && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl space-y-6 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-pink-100 rounded-full blur-3xl opacity-50 -mr-16 -mt-16"></div>
-                        
-                        <div className="w-16 h-16 bg-pink-50 rounded-2xl flex items-center justify-center mx-auto shadow-inner relative z-10">
-                            <Car size={36} className="text-pink-600" />
-                        </div>
-                        
-                        <div className="relative z-10">
-                            <h3 className="text-xl font-black text-gray-900">Explore Carpooling? 🚗</h3>
-                            <p className="text-gray-500 font-medium text-sm mt-2">
-                                Since you had a great trip, would you like to try our new Carpooling feature? Share rides and save money!
-                            </p>
-                        </div>
-                        
-                        <div className="flex gap-3 pt-2 relative z-10">
-                            <button
-                                onClick={handleCarpoolDecline}
-                                className="flex-1 py-4 bg-gray-100 text-gray-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 transition-all"
-                            >
-                                Maybe Later
-                            </button>
-                            <button
-                                onClick={handleCarpoolExplore}
-                                className="flex-1 py-4 bg-pink-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-pink-700 transition-all shadow-lg shadow-pink-200"
-                            >
-                                Explore
-                            </button>
-                        </div>
                     </div>
                 </div>
             )}
@@ -671,7 +506,7 @@ const LiveConnection = () => {
                         <div>
                             <h3 className="text-2xl font-black text-gray-900 mb-2 uppercase tracking-tight text-rose-600">EMERGENCY SOS</h3>
                             <p className="text-gray-700 font-bold text-base">
-                                Your partner ({chatState.emergencyAlert.realName || connectedPartner?.name || 'Traveler'}) needs help immediately!
+                                Your partner ({chatState.emergencyAlert.realName || partner?.name || 'Traveler'}) needs help immediately!
                             </p>
                             {chatState.emergencyAlert.realCollege && (
                                 <p className="text-sm font-medium text-gray-600 mt-2">
@@ -692,4 +527,4 @@ const LiveConnection = () => {
     );
 };
 
-export default LiveConnection;
+export default LiveCarpoolConnection;

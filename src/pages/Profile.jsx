@@ -225,6 +225,7 @@ const Profile = () => {
                                                     <div>
                                                         <p className="font-bold text-sm">{contact.emergency_name}</p>
                                                         <p className="text-xs text-rose-100 font-medium opacity-80">{contact.phone_no}</p>
+                                                        {contact.email && <p className="text-xs text-rose-100 font-medium opacity-80">{contact.email}</p>}
                                                     </div>
                                                     <div className="bg-green-400 p-1.5 rounded-full shadow-lg">
                                                         <Check size={12} className="text-white" />

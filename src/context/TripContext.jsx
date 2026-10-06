@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { createTrip as apiCreateTrip, getMyTrips, getTripMatches, sendTripRequest, getMyRequests, respondToRequest, endTrip as apiEndTrip } from '../services/travelService';
 import { useAuth } from './AuthContext';
 
@@ -52,49 +52,97 @@ export const TripProvider = ({ children }) => {
     const [partnerEndedTrip, setPartnerEndedTrip] = useState(false);
     const [privacyChoice, setPrivacyChoice] = useState('details');
 
-    const pressWeMet = () => setWeMet(prev => ({ ...prev, me: true, partner: true })); // Stub auto-partner
-    const pressIReached = () => setIReached(prev => ({ ...prev, me: true, partner: true }));
-    const revertToWaiting = () => {
+    const pressWeMet = useCallback(() => setWeMet(prev => ({ ...prev, me: true, partner: true })), []); // Stub auto-partner
+    const pressIReached = useCallback(() => setIReached(prev => ({ ...prev, me: true, partner: true })), []);
+    const revertToWaiting = useCallback(() => {
         setTripStatus(TRIP_STATUS.WAITING);
         setConnectedPartner(null);
         setWeMet({ me: false, partner: false });
         setIReached({ me: false, partner: false });
         setPartnerEndedTrip(false);
-    };
+    }, []);
     
     // Restore active trip from backend on mount
     useEffect(() => {
-        if (!user) return;
+        if (!user) {
+            setActiveTrip(null);
+            setTripStatus(TRIP_STATUS.IDLE);
+            setMatches([]);
+            setSentRequests([]);
+            setReceivedRequests([]);
+            setConnectedPartner(null);
+            setWeMet({ me: false, partner: false });
+            setIReached({ me: false, partner: false });
+            setPartnerEndedTrip(false);
+            return;
+        }
         const fetchActiveTrip = async () => {
             try {
-                const trips = await getMyTrips(true, 1, 0);
-                if (trips.length > 0) {
-                    const trip = trips[0];
+                // 1. Fetch requests to check if currently connected
+                let isConnected = false;
+                let acceptedSent = null;
+                let acceptedReceived = null;
+                try {
+                    const reqs = await getMyRequests();
+                    acceptedSent = reqs.sent.find(r => r.status === 'accepted');
+                    acceptedReceived = reqs.received.find(r => r.status === 'accepted');
+                    isConnected = !!(acceptedSent || acceptedReceived);
+                } catch (e) {
+                    console.error("Failed to fetch requests", e);
+                }
+
+                // 2. Fetch active trips and filter stale ones
+                const trips = await getMyTrips(true, 10, 0);
+                let validTrip = null;
+
+                for (const trip of trips) {
+                    const tripTime = new Date(trip.travel_date).getTime();
+                    const flexMs = (trip.time_flex_minutes || 30) * 60000;
+                    const bufferMs = 60 * 60000; // 1 hour buffer
+                    
+                    // If not connected and time has passed significantly, consider it stale
+                    const isStale = !isConnected && (Date.now() > tripTime + flexMs + bufferMs);
+
+                    if (isStale && trip.status === 'SEARCHING') {
+                        try {
+                            await apiEndTrip(trip.travel_id);
+                            console.log(`Cleaned up stale trip ${trip.travel_id}`);
+                        } catch (e) {
+                            console.error("Failed to cleanup stale trip", e);
+                        }
+                    } else if (!validTrip) {
+                        validTrip = trip;
+                    }
+                }
+
+                if (validTrip) {
                     setActiveTrip({
-                        ...trip,
-                        id: trip.travel_id,
-                        start: trip.start_label,
-                        end: trip.end_label,
-                        start_lat: trip.start_lat,
-                        start_lng: trip.start_lng,
-                        end_lat: trip.end_lat,
-                        end_lng: trip.end_lng,
-                        mode: trip.mode_of_transport,
-                        vehicleNo: trip.vehicle_no,
-                        createdAt: trip.created_at,
+                        ...validTrip,
+                        id: validTrip.travel_id,
+                        start: validTrip.start_label,
+                        end: validTrip.end_label,
+                        start_lat: validTrip.start_lat,
+                        start_lng: validTrip.start_lng,
+                        end_lat: validTrip.end_lat,
+                        end_lng: validTrip.end_lng,
+                        mode: validTrip.mode_of_transport,
+                        vehicleNo: validTrip.vehicle_no,
+                        createdAt: validTrip.created_at,
                     });
                     
-                    const reqs = await getMyRequests();
-                    const acceptedSent = reqs.sent.find(r => r.status === 'accepted');
-                    const acceptedReceived = reqs.received.find(r => r.status === 'accepted');
-                    if (acceptedSent || acceptedReceived) {
+                    if (isConnected) {
                         setTripStatus(TRIP_STATUS.CONNECTED);
                         setConnectedPartner({
                              id: acceptedSent ? acceptedSent.sent_to : acceptedReceived.sent_by,
+                             request_id: acceptedSent ? acceptedSent.request_id : acceptedReceived.request_id,
                         });
                     } else {
                         setTripStatus(TRIP_STATUS.WAITING);
                     }
+                } else {
+                    setActiveTrip(null);
+                    setTripStatus(TRIP_STATUS.IDLE);
+                    setConnectedPartner(null);
                 }
             } catch (err) {
                 console.error("Error fetching active trip", err);
@@ -118,10 +166,11 @@ export const TripProvider = ({ children }) => {
                         start: m.start_location,
                         end: m.end_location,
                         mode: m.mode_of_transport,
+                        rating: m.rating,
                         distance: m.start_distance_m,
                         verified: true,
                     }));
-                    setMatches(mappedMatches);
+                    setMatches(prev => JSON.stringify(prev) === JSON.stringify(mappedMatches) ? prev : mappedMatches);
                     
                     const reqData = await getMyRequests();
                     const mappedReceived = (reqData.received || [])
@@ -138,11 +187,12 @@ export const TripProvider = ({ children }) => {
                             college: r.partner_college,
                             phone: r.partner_phone,
                             anonymous_id: r.partner_anonymous_id,
+                            rating: r.partner_rating,
                             start: r.partner_start,
                             end: r.partner_end,
                             verified: true
                         }));
-                    setReceivedRequests(mappedReceived);
+                    setReceivedRequests(prev => JSON.stringify(prev) === JSON.stringify(mappedReceived) ? prev : mappedReceived);
                     
                     const mappedSent = (reqData.sent || [])
                         .filter(r => r.status === 'pending' || r.status === 'accepted')
@@ -156,10 +206,11 @@ export const TripProvider = ({ children }) => {
                             college: r.partner_college,
                             phone: r.partner_phone,
                             anonymous_id: r.partner_anonymous_id,
+                            rating: r.partner_rating,
                             start: r.partner_start,
                             end: r.partner_end
                         }));
-                    setSentRequests(mappedSent);
+                    setSentRequests(prev => JSON.stringify(prev) === JSON.stringify(mappedSent) ? prev : mappedSent);
                     
                     const acceptedSent = mappedSent.find(r => r.status === 'ACCEPTED');
                     const acceptedReceivedRaw = (reqData.received || []).find(r => r.status === 'accepted');
@@ -168,11 +219,13 @@ export const TripProvider = ({ children }) => {
                         setTripStatus(TRIP_STATUS.CONNECTED);
                         setConnectedPartner({ 
                             id: acceptedSent.partnerUserId,
+                            request_id: acceptedSent.id,
                             privacy_type: acceptedSent.connectionType,
                             name: acceptedSent.name,
                             college: acceptedSent.college,
                             phone: acceptedSent.phone,
                             anonymous_id: acceptedSent.anonymous_id,
+                            rating: acceptedSent.rating,
                             start: acceptedSent.start,
                             end: acceptedSent.end
                         });
@@ -180,11 +233,13 @@ export const TripProvider = ({ children }) => {
                         setTripStatus(TRIP_STATUS.CONNECTED);
                         setConnectedPartner({
                             id: acceptedReceivedRaw.sent_by,
+                            request_id: acceptedReceivedRaw.request_id,
                             privacy_type: acceptedReceivedRaw.sender_privacy_mode === 'DETAILS' ? 'details' : 'anonymous',
                             name: acceptedReceivedRaw.partner_name,
                             college: acceptedReceivedRaw.partner_college,
                             phone: acceptedReceivedRaw.partner_phone,
                             anonymous_id: acceptedReceivedRaw.partner_anonymous_id,
+                            rating: acceptedReceivedRaw.partner_rating,
                             start: acceptedReceivedRaw.partner_start,
                             end: acceptedReceivedRaw.partner_end
                         });
@@ -197,12 +252,12 @@ export const TripProvider = ({ children }) => {
             };
             
             poll(); // run immediately
-            pollInterval = setInterval(poll, 3000);
+            pollInterval = setInterval(poll, 15000);
         }
         return () => clearInterval(pollInterval);
     }, [tripStatus, activeTrip, getMyRequests]);
 
-    const createTrip = async (tripData) => {
+    const createTrip = useCallback(async (tripData) => {
         try {
             let startCoordObj = normalizeCoords(tripData.startCoords);
             if (!startCoordObj && tripData.start) {
@@ -258,9 +313,9 @@ export const TripProvider = ({ children }) => {
             alert("Could not create trip. " + errMsg);
             return false;
         }
-    };
+    }, []);
 
-    const sendRequest = async (matchId, privacyChoice) => {
+    const sendRequest = useCallback(async (matchId, privacyChoice) => {
         try {
             const senderTripId = activeTrip?.id || activeTrip?.travel_id;
             if (!senderTripId) {
@@ -281,9 +336,9 @@ export const TripProvider = ({ children }) => {
             const errMsg = typeof detail === 'object' ? JSON.stringify(detail) : (detail || err.message);
             alert("Error sending request: " + errMsg);
         }
-    };
+    }, [activeTrip]);
 
-    const cancelRequest = async (matchIdOrRequestId) => {
+    const cancelRequest = useCallback(async (matchIdOrRequestId) => {
         try {
             const target = sentRequests.find(r => r.matchId === matchIdOrRequestId.toString() || r.id === matchIdOrRequestId);
             if (target?.id) {
@@ -299,9 +354,9 @@ export const TripProvider = ({ children }) => {
             const errMsg = typeof detail === 'object' ? JSON.stringify(detail) : (detail || err.message);
             alert("Error cancelling request: " + errMsg);
         }
-    };
+    }, [sentRequests]);
 
-    const acceptRequest = async (requestId, privacyChoice) => {
+    const acceptRequest = useCallback(async (requestId, privacyChoice) => {
         try {
             await respondToRequest(requestId, 'accepted', privacyChoice);
             const req = receivedRequests.find(r => r.id === requestId);
@@ -309,6 +364,7 @@ export const TripProvider = ({ children }) => {
             if (req) {
                 setConnectedPartner({
                     id: req.partnerUserId,
+                    request_id: requestId,
                     privacy_type: req.connectionType,
                     name: req.name,
                     college: req.college,
@@ -324,9 +380,9 @@ export const TripProvider = ({ children }) => {
             const errMsg = typeof detail === 'object' ? JSON.stringify(detail) : (detail || err.message);
             alert("Error accepting request: " + errMsg);
         }
-    };
+    }, [receivedRequests]);
 
-    const declineRequest = async (requestId) => {
+    const declineRequest = useCallback(async (requestId) => {
         try {
             await respondToRequest(requestId, 'rejected');
             setReceivedRequests(prev => prev.filter(r => r.id !== requestId));
@@ -336,9 +392,9 @@ export const TripProvider = ({ children }) => {
             const errMsg = typeof detail === 'object' ? JSON.stringify(detail) : (detail || err.message);
             alert("Error declining request: " + errMsg);
         }
-    };
+    }, []);
 
-    const endTrip = async () => {
+    const endTrip = useCallback(async () => {
         try {
             if (activeTrip?.id) {
                 await apiEndTrip(activeTrip.id);
@@ -358,19 +414,25 @@ export const TripProvider = ({ children }) => {
             setIReached({ me: false, partner: false });
             setPartnerEndedTrip(false);
         }
-    };
+    }, [activeTrip]);
 
-    const retryMatching = () => setTripStatus(TRIP_STATUS.WAITING);
-    const triggerTimeout = () => setTripStatus(TRIP_STATUS.TIMEOUT);
-    const emergencyAction = () => alert("Emergency Action Triggered!");
+    const retryMatching = useCallback(() => setTripStatus(TRIP_STATUS.WAITING), []);
+    const triggerTimeout = useCallback(() => setTripStatus(TRIP_STATUS.TIMEOUT), []);
+    const emergencyAction = useCallback(() => alert("Emergency Action Triggered!"), []);
+
+    const contextValue = useMemo(() => ({
+        tripStatus, activeTrip, matches, sentRequests, receivedRequests, connectedPartner,
+        createTrip, sendRequest, cancelRequest, acceptRequest, declineRequest, endTrip, retryMatching, triggerTimeout, emergencyAction,
+        hasActiveTrip: tripStatus !== TRIP_STATUS.IDLE, timeoutLimitMs,
+        weMet, iReached, bothMet, bothReached, partnerEndedTrip, pressWeMet, pressIReached, revertToWaiting, privacyChoice, setPrivacyChoice
+    }), [
+        tripStatus, activeTrip, matches, sentRequests, receivedRequests, connectedPartner,
+        timeoutLimitMs, weMet, iReached, bothMet, bothReached, partnerEndedTrip, privacyChoice,
+        createTrip, sendRequest, cancelRequest, acceptRequest, declineRequest, endTrip, retryMatching, triggerTimeout, emergencyAction, pressWeMet, pressIReached, revertToWaiting
+    ]);
 
     return (
-        <TripContext.Provider value={{
-            tripStatus, activeTrip, matches, sentRequests, receivedRequests, connectedPartner,
-            createTrip, sendRequest, cancelRequest, acceptRequest, declineRequest, endTrip, retryMatching, triggerTimeout, emergencyAction,
-            hasActiveTrip: tripStatus !== TRIP_STATUS.IDLE, timeoutLimitMs,
-            weMet, iReached, bothMet, bothReached, partnerEndedTrip, pressWeMet, pressIReached, revertToWaiting, privacyChoice, setPrivacyChoice
-        }}>
+        <TripContext.Provider value={contextValue}>
             {children}
         </TripContext.Provider>
     );

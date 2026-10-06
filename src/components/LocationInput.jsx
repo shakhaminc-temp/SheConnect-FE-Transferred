@@ -186,9 +186,11 @@ const LocationInput = ({ label, value, onChange, placeholder, error }) => {
 
     return (
         <div className="relative group" ref={wrapperRef}>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5 transition-colors group-focus-within:text-pink-600">
-                {label}
-            </label>
+            {label && (
+                <label className="block text-sm font-medium text-gray-700 mb-1.5 transition-colors group-focus-within:text-pink-600">
+                    {label}
+                </label>
+            )}
 
             <div className="relative">
                 <input

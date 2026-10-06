@@ -329,17 +329,7 @@ export const mockBlogs = [
         likes: 34,
         tags: ["solo travel", "goa", "train"],
     },
-    {
-        id: 2,
-        title: "10 Safety Tips Every Woman Traveler Should Know",
-        content:
-            "1. Always share your live location with at least two trusted contacts. 2. Keep your phone charged. 3. Sit near other women or families. 4. Trust your gut — if something feels off, move. 5. Have emergency numbers saved offline. 6. Use apps like SheConnect to find verified travel partners. 7. Never share your accommodation details with strangers. 8. Carry a small safety alarm. 9. Dress comfortably for quick movement. 10. Learn a few local words wherever you travel.",
-        author: "SheConnect Team",
-        author_id: null,
-        date: "2025-12-20",
-        likes: 128,
-        tags: ["safety", "tips", "women"],
-    },
+
     {
         id: 3,
         title: "Night Bus Mumbai to Pune – Was It Safe?",

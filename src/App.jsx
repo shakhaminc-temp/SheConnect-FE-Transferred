@@ -13,6 +13,10 @@ import Settings from './pages/Settings';
 import Profile from './pages/Profile';
 import LiveConnection from './pages/LiveConnection';
 import WaitingRoom from './pages/WaitingRoom';
+import Carpooling from './pages/Carpooling';
+import OfferRide from './pages/OfferRide';
+import LiveCarpoolConnection from './pages/LiveCarpoolConnection';
+import ChatHistory from './pages/ChatHistory';
 
 import ConnectedPersonal from './components/ConnectedPersonal';
 import ConnectedAnonymous from "./components/ConnectedAnonymous";
@@ -27,7 +31,7 @@ function App() {
   return (
     <AuthProvider>
       <TripProvider>
-        <Router>
+        <Router basename="/sheconnect">
           <Routes>
             {/* Public Routes */}
             <Route path="/" element={<LandingPage />} />
@@ -87,6 +91,38 @@ function App() {
               element={
                 <ProtectedRoute>
                   <WaitingRoom />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/carpooling"
+              element={
+                <ProtectedRoute>
+                  <Carpooling />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/offer-ride"
+              element={
+                <ProtectedRoute>
+                  <OfferRide />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/live-carpool"
+              element={
+                <ProtectedRoute>
+                  <LiveCarpoolConnection />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/chat-history"
+              element={
+                <ProtectedRoute>
+                  <ChatHistory />
                 </ProtectedRoute>
               }
             />

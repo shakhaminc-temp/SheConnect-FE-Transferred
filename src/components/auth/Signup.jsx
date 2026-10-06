@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { User, GraduationCap, Mail, Phone, Lock, ChevronRight, ChevronLeft, ShieldCheck, Heart, Users, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import { GraduationCap, Mail, Phone, Lock, ChevronRight, ChevronLeft, ShieldCheck, Heart, Users, Eye, EyeOff, User } from 'lucide-react';
 import { getColleges } from '../../services/authService';
 
 const Signup = ({
@@ -7,8 +7,8 @@ const Signup = ({
     setView,
     fullName,
     setFullName,
-    collegeName,
-    setCollegeName,
+    college,
+    setCollege,
     email,
     setEmail,
     phone,
@@ -36,35 +36,19 @@ const Signup = ({
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-    // College list state
-    const [colleges, setColleges] = useState([]);
-    const [collegesLoading, setCollegesLoading] = useState(false);
-    const [collegesError, setCollegesError] = useState("");
-
-    // ✅ FIX 1: fetchColleges moved outside useEffect so retry button can call it
-    const fetchColleges = async () => {
-        setCollegesLoading(true);
-        setCollegesError("");
-        try {
-            const res = await getColleges();
-            console.log("✅ Colleges API response:", res.data); // DEBUG
-            if (Array.isArray(res.data) && res.data.length > 0) {
-                setColleges(res.data);
-            } else {
-                console.warn("⚠️ Colleges array is empty or invalid:", res.data);
-                setCollegesError("No colleges found in database.");
-            }
-        } catch (e) {
-            console.error("❌ Colleges fetch error:", e?.response?.data || e?.message || e); // DEBUG
-            setCollegesError("Failed to load colleges. Check if backend is running.");
-        } finally {
-            setCollegesLoading(false);
-        }
-    };
-
+    const [collegesList, setCollegesList] = useState([]);
+    
     useEffect(() => {
-        if (view === 'signup_step1') fetchColleges();
-    }, [view]);
+        const fetchColleges = async () => {
+            try {
+                const res = await getColleges();
+                setCollegesList(res.data);
+            } catch (e) {
+                console.error("Failed to fetch colleges");
+            }
+        };
+        fetchColleges();
+    }, []);
 
     const steps = [
         { id: 'signup_step1', label: 'Identity' },
@@ -131,51 +115,24 @@ const Signup = ({
                             {fieldErrors.fullName && <p className="text-[10px] text-red-500 font-bold mt-1 ml-1 uppercase tracking-wider">{fieldErrors.fullName}</p>}
                         </div>
 
-                        {/* College Dropdown */}
+                        {/* College Selection */}
                         <div className="group">
                             <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2 px-1">College</label>
                             <div className="relative">
                                 <GraduationCap className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-pink-600 transition-colors z-10" size={18} />
                                 <select
                                     required
-                                    className={`w-full pl-12 pr-4 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 transition-all font-medium text-gray-900 appearance-none ${fieldErrors.collegeName ? 'focus:ring-red-500 ring-2 ring-red-200' : 'focus:ring-pink-500'}`}
-                                    value={collegeName}
-                                    // ✅ FIX 2: Parse to Number — FastAPI expects integer, not string
-                                    onChange={(e) => setCollegeName(e.target.value ? Number(e.target.value) : "")}
-                                    onBlur={(e) => validateField("collegeName", e.target.value)}
-                                    // ✅ FIX 3: Only disable while loading, NOT on error
-                                    disabled={collegesLoading}
+                                    className={`w-full pl-12 pr-4 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 transition-all font-medium text-gray-900 appearance-none ${fieldErrors.college ? 'focus:ring-red-500 ring-2 ring-red-200' : 'focus:ring-pink-500'}`}
+                                    value={college}
+                                    onChange={(e) => setCollege(e.target.value)}
                                 >
-                                    <option value="">
-                                        {collegesLoading ? "Loading colleges..." : "Select College"}
-                                    </option>
-                                    {colleges.map((col) => (
-                                        <option key={col.college_id} value={col.college_id}>
-                                            {col.college_name}
-                                        </option>
+                                    <option value="">Select College</option>
+                                    {collegesList.map(c => (
+                                        <option key={c.college_id} value={c.college_id}>{c.college_name}</option>
                                     ))}
                                 </select>
                             </div>
-
-                            {/* ✅ FIX 4: Show error with retry button instead of disabling */}
-                            {collegesError && (
-                                <div className="flex items-center gap-2 mt-2 px-1">
-                                    <p className="text-[10px] text-red-500 font-bold uppercase tracking-wider flex-1">
-                                        {collegesError}
-                                    </p>
-                                    <button
-                                        type="button"
-                                        onClick={fetchColleges}
-                                        className="flex items-center gap-1 text-[10px] text-pink-600 font-black uppercase tracking-wider hover:underline"
-                                    >
-                                        <RefreshCw size={10} /> Retry
-                                    </button>
-                                </div>
-                            )}
-
-                            {fieldErrors.collegeName && (
-                                <p className="text-[10px] text-red-500 font-bold mt-1 ml-1 uppercase tracking-wider">{fieldErrors.collegeName}</p>
-                            )}
+                            {fieldErrors.college && <p className="text-[10px] text-red-500 font-bold mt-1 ml-1 uppercase tracking-wider">{fieldErrors.college}</p>}
                         </div>
 
                         {/* College Email */}
@@ -218,7 +175,8 @@ const Signup = ({
                                 <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2 px-1">Gender</label>
                                 <select
                                     required
-                                    className="w-full px-4 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-pink-500 transition-all font-medium text-sm text-gray-900 appearance-none"
+                                    disabled={false}
+                                    className="w-full px-4 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-pink-500 transition-all font-medium text-sm text-gray-900 appearance-none disabled:opacity-70"
                                     value={gender}
                                     onChange={(e) => setGender(e.target.value)}
                                 >
@@ -290,18 +248,16 @@ const Signup = ({
                                         {fieldErrors.emergency1_phone && <p className="text-[10px] text-red-500 font-bold ml-1 uppercase tracking-wider">{fieldErrors.emergency1_phone}</p>}
                                     </div>
                                     <div className="flex flex-col gap-1">
-                                        <select
+                                        <input
+                                            type="email"
+                                            placeholder="Email Address"
                                             required
-                                            className={`w-full px-5 py-3.5 bg-white border-none rounded-2xl focus:ring-2 transition-all font-medium text-gray-900 appearance-none ${fieldErrors.emergency1_gender ? 'focus:ring-red-500 ring-2 ring-red-200' : 'focus:ring-pink-500'}`}
-                                            value={emergency1.gender}
-                                            onChange={(e) => setEmergency1({ ...emergency1, gender: e.target.value })}
-                                        >
-                                            <option value="">Gender</option>
-                                            <option value="Female">Female</option>
-                                            <option value="Male">Male</option>
-                                            <option value="Other">Other</option>
-                                        </select>
-                                        {fieldErrors.emergency1_gender && <p className="text-[10px] text-red-500 font-bold ml-1 uppercase tracking-wider">{fieldErrors.emergency1_gender}</p>}
+                                            className={`w-full px-5 py-3.5 bg-white border-none rounded-2xl focus:ring-2 transition-all font-medium text-gray-900 placeholder:text-gray-300 ${fieldErrors.emergency1_email ? 'focus:ring-red-500 ring-2 ring-red-200' : 'focus:ring-pink-500'}`}
+                                            value={emergency1.email}
+                                            onChange={(e) => setEmergency1({ ...emergency1, email: e.target.value })}
+                                            onBlur={(e) => validateField("emergency1_email", e.target.value)}
+                                        />
+                                        {fieldErrors.emergency1_email && <p className="text-[10px] text-red-500 font-bold ml-1 uppercase tracking-wider">{fieldErrors.emergency1_email}</p>}
                                     </div>
                                 </div>
                             </div>
@@ -340,18 +296,16 @@ const Signup = ({
                                         {fieldErrors.emergency2_phone && <p className="text-[10px] text-red-500 font-bold ml-1 uppercase tracking-wider">{fieldErrors.emergency2_phone}</p>}
                                     </div>
                                     <div className="flex flex-col gap-1">
-                                        <select
+                                        <input
+                                            type="email"
+                                            placeholder="Email Address"
                                             required
-                                            className={`w-full px-5 py-3.5 bg-white border-none rounded-2xl focus:ring-2 transition-all font-medium text-gray-900 appearance-none ${fieldErrors.emergency2_gender ? 'focus:ring-red-500 ring-2 ring-red-200' : 'focus:ring-pink-500'}`}
-                                            value={emergency2.gender}
-                                            onChange={(e) => setEmergency2({ ...emergency2, gender: e.target.value })}
-                                        >
-                                            <option value="">Gender</option>
-                                            <option value="Female">Female</option>
-                                            <option value="Male">Male</option>
-                                            <option value="Other">Other</option>
-                                        </select>
-                                        {fieldErrors.emergency2_gender && <p className="text-[10px] text-red-500 font-bold ml-1 uppercase tracking-wider">{fieldErrors.emergency2_gender}</p>}
+                                            className={`w-full px-5 py-3.5 bg-white border-none rounded-2xl focus:ring-2 transition-all font-medium text-gray-900 placeholder:text-gray-300 ${fieldErrors.emergency2_email ? 'focus:ring-red-500 ring-2 ring-red-200' : 'focus:ring-pink-500'}`}
+                                            value={emergency2.email}
+                                            onChange={(e) => setEmergency2({ ...emergency2, email: e.target.value })}
+                                            onBlur={(e) => validateField("emergency2_email", e.target.value)}
+                                        />
+                                        {fieldErrors.emergency2_email && <p className="text-[10px] text-red-500 font-bold ml-1 uppercase tracking-wider">{fieldErrors.emergency2_email}</p>}
                                     </div>
                                 </div>
                             </div>
@@ -440,7 +394,7 @@ const Signup = ({
                             </button>
                             <button type="submit" className="flex-[2] py-4 bg-pink-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-2xl shadow-pink-100 hover:bg-pink-700 transition-all flex items-center justify-center gap-2">
                                 <span className="flex items-center gap-2 text-white">
-                                    Generate OTP <ChevronRight size={18} />
+                                    Sign Up <ChevronRight size={18} />
                                 </span>
                             </button>
                         </div>

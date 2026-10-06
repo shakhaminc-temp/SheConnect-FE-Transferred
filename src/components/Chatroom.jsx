@@ -1,21 +1,26 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Send, X, AlertCircle, Check, CheckCheck } from 'lucide-react';
-import useChatWebSocket from '../hooks/useChatWebSocket';
 import { useAuth } from '../context/AuthContext';
+import useChatWebSocket from '../hooks/useChatWebSocket';
 
-const Chatroom = ({ partner, onClose }) => {
+const Chatroom = ({ partner, onClose, chatState, readOnly = false }) => {
     const { user } = useAuth();
     const partnerUserId = partner?.id || partner?.user_id; // Support different ID formats
+    const requestId = partner?.request_id;
+
+    // Use provided chatState (from live connection) or spin up a local instance (for ChatHistory)
+    const fallbackChatState = useChatWebSocket(chatState ? null : partnerUserId, chatState ? null : requestId, readOnly);
+    
+    const activeChatState = chatState || fallbackChatState;
 
     const {
-        messages,
-        isTyping,
-        // Available if needed elsewhere in UI
-        isConnected,
-        sendMessage,
-        sendTyping,
-        markAsRead
-    } = useChatWebSocket(partnerUserId);
+        messages = [],
+        isTyping = false,
+        isConnected = false,
+        sendMessage = () => {},
+        sendTyping = () => {},
+        markAsRead = () => {}
+    } = activeChatState;
 
     const [newMessage, setNewMessage] = useState('');
     const messagesEndRef = useRef(null);
@@ -99,12 +104,14 @@ const Chatroom = ({ partner, onClose }) => {
                     </div>
                     <div>
                         <h3 className="text-sm font-black text-gray-900">{partner?.name || 'Partner'}</h3>
-                        <div className="flex items-center gap-1.5">
-                            <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`}></div>
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                                {isConnected ? 'Online' : 'Reconnecting...'}
-                            </span>
-                        </div>
+                        {!readOnly && (
+                            <div className="flex items-center gap-1.5">
+                                <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`}></div>
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                                    {isConnected ? 'Online' : 'Reconnecting...'}
+                                </span>
+                            </div>
+                        )}
                     </div>
                 </div>
                 <button
@@ -116,7 +123,7 @@ const Chatroom = ({ partner, onClose }) => {
             </div>
 
             {/* Error Banner */}
-            {!isConnected && (
+            {!isConnected && !readOnly && (
                 <div className="bg-amber-50 px-4 py-2 flex items-center gap-2 text-amber-700 text-xs font-bold w-full shrink-0">
                     <AlertCircle size={14} />
                     Connection lost. Attempting to reconnect...
@@ -125,19 +132,19 @@ const Chatroom = ({ partner, onClose }) => {
 
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-[#fafcff]">
-                {messages.length === 0 && isConnected && (
+                {messages.length === 0 && (isConnected || readOnly) && (
                     <div className="h-full flex flex-col items-center justify-center text-center space-y-3 opacity-50">
                         <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center text-gray-400">
                             <Send size={24} />
                         </div>
                         <p className="text-xs font-black uppercase tracking-widest text-gray-500">
-                            Start of conversation
+                            {readOnly ? "No messages in this chat" : "Start of conversation"}
                         </p>
                     </div>
                 )}
 
                 {messages.map((msg, index) => {
-                    const isMe = String(msg.senderId) === String(user?.id) || msg.senderId === 'me';
+                    const isMe = String(msg.senderId) === String(user?.id || user?.user_id) || msg.senderId === 'me';
 
                     return (
                         <div
@@ -181,35 +188,37 @@ const Chatroom = ({ partner, onClose }) => {
             </div>
 
             {/* Input Area */}
-            <div className="p-4 bg-white border-t border-gray-100 shrink-0">
-                <form
-                    onSubmit={handleSend}
-                    className="flex items-end gap-2"
-                >
-                    <textarea
-                        value={newMessage}
-                        onChange={handleTyping}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                                e.preventDefault();
-                                handleSend(e);
-                            }
-                        }}
-                        disabled={!isConnected}
-                        maxLength={2000}
-                        placeholder={isConnected ? "Type a message..." : "Waiting for connection..."}
-                        className="flex-1 max-h-32 min-h-[48px] bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm font-medium text-gray-800 focus:outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-100 transition-all resize-none disabled:opacity-50 disabled:cursor-not-allowed"
-                        rows={1}
-                    />
-                    <button
-                        type="submit"
-                        disabled={!newMessage.trim() || !isConnected}
-                        className="w-12 h-12 flex-shrink-0 bg-gray-900 text-white rounded-2xl flex items-center justify-center hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed group"
+            {!readOnly && (
+                <div className="p-4 bg-white border-t border-gray-100 shrink-0">
+                    <form
+                        onSubmit={handleSend}
+                        className="flex items-end gap-2"
                     >
-                        <Send size={18} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-                    </button>
-                </form>
-            </div>
+                        <textarea
+                            value={newMessage}
+                            onChange={handleTyping}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    handleSend(e);
+                                }
+                            }}
+                            disabled={!isConnected}
+                            maxLength={2000}
+                            placeholder={isConnected ? "Type a message..." : "Waiting for connection..."}
+                            className="flex-1 max-h-32 min-h-[48px] bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm font-medium text-gray-800 focus:outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-100 transition-all resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+                            rows={1}
+                        />
+                        <button
+                            type="submit"
+                            disabled={!newMessage.trim() || !isConnected}
+                            className="w-12 h-12 flex-shrink-0 bg-gray-900 text-white rounded-2xl flex items-center justify-center hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed group"
+                        >
+                            <Send size={18} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                        </button>
+                    </form>
+                </div>
+            )}
         </div>
     );
 };

@@ -16,6 +16,7 @@ import {
     Eye,
     ChevronDown,
     ChevronUp,
+    Star,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTrip, TRIP_STATUS, REQUEST_STATUS } from '../context/TripContext';
@@ -196,6 +197,12 @@ const Requests = () => {
                                                                 <span className="text-[10px] bg-gray-100 text-gray-500 font-black px-3 py-1 rounded-full uppercase tracking-widest">
                                                                     {request.college}
                                                                 </span>
+                                                            )}
+                                                            {request.rating && (
+                                                                <div className="flex items-center gap-1 bg-yellow-50 px-2 py-0.5 rounded-lg border border-yellow-100">
+                                                                    <Star size={12} className="fill-yellow-400 text-yellow-500" />
+                                                                    <span className="text-xs font-bold text-yellow-700">{request.rating}</span>
+                                                                </div>
                                                             )}
                                                         </div>
                                                         <div className="flex flex-wrap items-center gap-5 text-sm text-gray-400 font-bold">

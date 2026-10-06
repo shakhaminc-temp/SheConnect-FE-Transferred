@@ -22,12 +22,12 @@ const AuthModal = ({ isOpen, onClose }) => {
 
     // Signup Specific State
     const [fullName, setFullName] = useState('');
-    const [collegeName, setCollegeName] = useState('');
+    const [college, setCollege] = useState('');
     const [phone, setPhone] = useState('');
     const [gender, setGender] = useState('');
 
-    const [emergency1, setEmergency1] = useState({ name: '', phone: '', gender: '' });
-    const [emergency2, setEmergency2] = useState({ name: '', phone: '', gender: '' });
+    const [emergency1, setEmergency1] = useState({ name: '', phone: '', email: '' });
+    const [emergency2, setEmergency2] = useState({ name: '', phone: '', email: '' });
 
     const [fieldErrors, setFieldErrors] = useState({}); // { email: 'Error message', ... }
 
@@ -40,11 +40,11 @@ const AuthModal = ({ isOpen, onClose }) => {
         setConfirmPassword('');
         setOtp('');
         setFullName('');
-        setCollegeName('');
+        setCollege('');
         setPhone('');
         setGender('');
-        setEmergency1({ name: '', phone: '', gender: '' });
-        setEmergency2({ name: '', phone: '', gender: '' });
+        setEmergency1({ name: '', phone: '', email: '' });
+        setEmergency2({ name: '', phone: '', email: '' });
         setMessage({ type: '', text: '' });
         setFieldErrors({});
         onClose();
@@ -81,7 +81,9 @@ const AuthModal = ({ isOpen, onClose }) => {
                 if (!validateName(value)) error = "Use only letters (2-50 chars)";
                 break;
             case "email":
-                if (!validateEmail(value)) error = "Invalid email format";
+            case "emergency1_email":
+            case "emergency2_email":
+                if (value && !validateEmail(value)) error = "Invalid email format";
                 break;
             case "phone":
             case "emergency1_phone":
@@ -155,14 +157,15 @@ const AuthModal = ({ isOpen, onClose }) => {
                 try {
                     await login(response.data);
                     console.log("Context updated successfully");
+                    console.log("Redirecting to /home...");
+                    navigate("/home");
+                    resetState();
                 } catch (loginError) {
                     console.error("Error during context login:", loginError);
-                    // Continue anyway if it's just a profile fetch error in mock mode
+                    setMessage({ type: 'error', text: loginError.message || 'Failed to fetch user profile. Please try again.' });
+                    setLoading(false);
+                    return;
                 }
-
-                console.log("Redirecting to /home...");
-                navigate("/home");
-                resetState();
             } else if (first_login) {
                 console.log("Verification required (first_login). Moving to OTP view.");
                 setOtpToken(response.data.otp_token);
@@ -193,13 +196,13 @@ const AuthModal = ({ isOpen, onClose }) => {
         const isEmailValid = validateField("email", email);
         const isPhoneValid = validateField("phone", phone);
 
-        if (!collegeName) {
-            setFieldErrors(prev => ({ ...prev, collegeName: "Please select your college" }));
+        if (!college) {
+            setFieldErrors(prev => ({ ...prev, college: "Please select a college" }));
         } else {
-            setFieldErrors(prev => ({ ...prev, collegeName: "" }));
+            setFieldErrors(prev => ({ ...prev, college: "" }));
         }
 
-        if (isNameValid && isEmailValid && isPhoneValid && collegeName) {
+        if (isNameValid && isEmailValid && isPhoneValid && college && gender) {
             setView('signup_step2');
             setMessage({ type: '', text: '' });
         }
@@ -213,18 +216,6 @@ const AuthModal = ({ isOpen, onClose }) => {
         const v2_name = validateField("emergency2_name", emergency2.name);
         const v2_phone = validateField("emergency2_phone", emergency2.phone);
 
-        if (!emergency1.gender) {
-            setFieldErrors(prev => ({ ...prev, emergency1_gender: "Select gender" }));
-        } else {
-            setFieldErrors(prev => ({ ...prev, emergency1_gender: "" }));
-        }
-
-        if (!emergency2.gender) {
-            setFieldErrors(prev => ({ ...prev, emergency2_gender: "Select gender" }));
-        } else {
-            setFieldErrors(prev => ({ ...prev, emergency2_gender: "" }));
-        }
-
         // Duplicate/Self Checks
         let contactMatchError = "";
         if (emergency1.phone === emergency2.phone) {
@@ -235,7 +226,7 @@ const AuthModal = ({ isOpen, onClose }) => {
 
         setFieldErrors(prev => ({ ...prev, contactMatch: contactMatchError }));
 
-        if (v1_name && v1_phone && v2_name && v2_phone && emergency1.gender && emergency2.gender && !contactMatchError) {
+        if (v1_name && v1_phone && v2_name && v2_phone && !contactMatchError) {
             setView('signup_step3');
             setMessage({ type: '', text: '' });
         }
@@ -257,29 +248,47 @@ const AuthModal = ({ isOpen, onClose }) => {
                 phone_no: phone,
                 password: password,
                 confirm_password: confirmPassword,
-                college_id: parseInt(collegeName),
+                college_id: parseInt(college),
                 emergency_contacts: [
                     {
                         emergency_name: emergency1.name,
                         phone_no: emergency1.phone,
-                        gender: emergency1.gender
+                        email: emergency1.email
                     },
                     {
                         emergency_name: emergency2.name,
                         phone_no: emergency2.phone,
-                        gender: emergency2.gender
+                        email: emergency2.email
                     }
                 ]
             };
 
             const response = await signupUser(payload);
-            setOtpToken(response.data.otp_token);
 
-            setMessage({ type: 'success', text: response.data.message });
-            setTimeout(() => {
-                setMessage({ type: '', text: '' });
-                setView('signup_step4');
-            }, 2000);
+            const { message, otp_token } = response.data;
+            setMessage({ type: 'success', text: message });
+            
+            if (otp_token) {
+                setOtpToken(otp_token);
+                setTimeout(() => {
+                    setMessage({ type: '', text: '' });
+                    setView('signup_step4');
+                }, 1500);
+            } else {
+                setTimeout(() => {
+                    setMessage({ type: '', text: '' });
+                    setFullName('');
+                    setEmail('');
+                    setPhone('');
+                    setGender('');
+                    setCollege('');
+                    setEmergency1({ name: '', phone: '', email: '' });
+                    setEmergency2({ name: '', phone: '', email: '' });
+                    setPassword('');
+                    setConfirmPassword('');
+                    setView('login');
+                }, 2000);
+            }
 
         } catch (error) {
             console.error("Signup error:", error);
@@ -467,8 +476,8 @@ const AuthModal = ({ isOpen, onClose }) => {
                                         setView={setView}
                                         fullName={fullName}
                                         setFullName={setFullName}
-                                        collegeName={collegeName}
-                                        setCollegeName={setCollegeName}
+                                        college={college}
+                                        setCollege={setCollege}
                                         email={email}
                                         setEmail={setEmail}
                                         phone={phone}

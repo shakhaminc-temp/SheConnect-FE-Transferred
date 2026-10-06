@@ -167,11 +167,11 @@ const Blog = () => {
                   <div className="flex items-center gap-4 mt-4 text-sm text-gray-400">
                     <div className="flex items-center gap-2">
                       <User size={16} />
-                      <span>{blog.user?.username || 'You'}</span>
+                      <span>{blog.author_name || 'Anonymous'}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Calendar size={16} />
-                      <span>{new Date(blog.created_at).toLocaleDateString()}</span>
+                      <span>{blog.created_at ? new Date(blog.created_at).toLocaleDateString() : 'Just now'}</span>
                     </div>
                     <button
                       onClick={() => handleDelete(blog.blog_id)}

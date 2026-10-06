@@ -1,8 +1,10 @@
 
 import axios from 'axios';
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').trim();
+
 const api = axios.create({
-    baseURL: import.meta.env.VITE_API_BASE_URL,
+    baseURL: API_BASE_URL,
     headers: {
         'Content-Type': 'application/json',
     },
@@ -13,7 +15,11 @@ api.interceptors.request.use(
     (config) => {
         const token = sessionStorage.getItem('token');
         if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
+            if (config.headers && typeof config.headers.set === 'function') {
+                config.headers.set('Authorization', `Bearer ${token}`);
+            } else {
+                config.headers.Authorization = `Bearer ${token}`;
+            }
         }
         return config;
     },
@@ -33,7 +39,11 @@ api.interceptors.response.use(
         if (originalRequest.url === '/auth/refresh-token') {
             sessionStorage.removeItem('token');
             sessionStorage.removeItem('refresh_token');
-            window.location.href = '/login';
+            return Promise.reject(error);
+        }
+
+        // Do not intercept 401s for login requests
+        if (originalRequest.url === '/auth/login' || originalRequest.url.endsWith('/auth/login')) {
             return Promise.reject(error);
         }
 
@@ -47,7 +57,7 @@ api.interceptors.response.use(
                 
                 // Do a raw axios call to avoid interceptor loops
                 const res = await axios.post(
-                    `${import.meta.env.VITE_API_BASE_URL}/auth/refresh-token`,
+                    `${API_BASE_URL}/auth/refresh-token`,
                     {},
                     { headers: { Authorization: `Bearer ${refreshToken}` } }
                 );
@@ -55,15 +65,17 @@ api.interceptors.response.use(
                 if (res.status === 200) {
                     sessionStorage.setItem('token', res.data.access_token);
                     api.defaults.headers.common['Authorization'] = `Bearer ${res.data.access_token}`;
-                    originalRequest.headers['Authorization'] = `Bearer ${res.data.access_token}`;
+                    if (originalRequest.headers && typeof originalRequest.headers.set === 'function') {
+                        originalRequest.headers.set('Authorization', `Bearer ${res.data.access_token}`);
+                    } else {
+                        originalRequest.headers['Authorization'] = `Bearer ${res.data.access_token}`;
+                    }
                     return api(originalRequest);
                 }
             } catch (err) {
                 console.error("Refresh token failed", err);
                 sessionStorage.removeItem('token');
                 sessionStorage.removeItem('refresh_token');
-                // Force logout redirect could be added here
-                window.location.href = '/login';
                 return Promise.reject(err);
             }
         }
