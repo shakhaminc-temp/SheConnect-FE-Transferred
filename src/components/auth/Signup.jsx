@@ -36,18 +36,24 @@ const Signup = ({
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-    const [collegesList, setCollegesList] = useState([]);
+    const [collegesList, setCollegesList] = useState([
+        { college_id: 1, college_name: "IMCC" }
+    ]);
     
     useEffect(() => {
+        let isMounted = true;
         const fetchColleges = async () => {
             try {
                 const res = await getColleges();
-                setCollegesList(res.data);
+                if (isMounted && res && Array.isArray(res.data) && res.data.length > 0) {
+                    setCollegesList(res.data);
+                }
             } catch (e) {
-                console.error("Failed to fetch colleges");
+                console.warn("Failed to fetch colleges from backend, using default list:", e);
             }
         };
         fetchColleges();
+        return () => { isMounted = false; };
     }, []);
 
     const steps = [
@@ -127,7 +133,7 @@ const Signup = ({
                                     onChange={(e) => setCollege(e.target.value)}
                                 >
                                     <option value="">Select College</option>
-                                    {collegesList.map(c => (
+                                    {Array.isArray(collegesList) && collegesList.map(c => (
                                         <option key={c.college_id} value={c.college_id}>{c.college_name}</option>
                                     ))}
                                 </select>

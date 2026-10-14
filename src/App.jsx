@@ -23,127 +23,134 @@ import ConnectedAnonymous from "./components/ConnectedAnonymous";
 
 
 
+import ErrorBoundary from './components/ErrorBoundary';
+
 function App() {
   useEffect(() => {
     // Backend health check removed as it was causing JSON parsing errors
   }, []);
 
   return (
-    <AuthProvider>
-      <TripProvider>
-        <Router basename="/sheconnect">
-          <Routes>
-            {/* Public Routes */}
-            <Route path="/" element={<LandingPage />} />
+    <ErrorBoundary>
+      <AuthProvider>
+        <TripProvider>
+          <Router basename="/sheconnect">
+            <Routes>
+              {/* Public Routes */}
+              <Route path="/" element={<LandingPage />} />
 
-            {/* Protected Routes */}
-            <Route
-              path="/home"
-              element={
-                <ProtectedRoute>
-                  <Home />
-                </ProtectedRoute>
-              }
-            />
+              {/* Protected Routes */}
+              <Route
+                path="/home"
+                element={
+                  <ProtectedRoute>
+                    <Home />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route
-              path="/profile"
-              element={
-                <ProtectedRoute>
-                  <Profile />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/start-trip"
-              element={
-                <ProtectedRoute>
-                  <StartTrip />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/blogs"
-              element={
-                <ProtectedRoute>
-                  <Blog />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/settings"
-              element={
-                <ProtectedRoute>
-                  <Settings />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/live-connection"
-              element={
-                <ProtectedRoute>
-                  <LiveConnection />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/waiting-room"
-              element={
-                <ProtectedRoute>
-                  <WaitingRoom />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/carpooling"
-              element={
-                <ProtectedRoute>
-                  <Carpooling />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/offer-ride"
-              element={
-                <ProtectedRoute>
-                  <OfferRide />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/live-carpool"
-              element={
-                <ProtectedRoute>
-                  <LiveCarpoolConnection />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/chat-history"
-              element={
-                <ProtectedRoute>
-                  <ChatHistory />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/connected-personal"
-              element={
-                <ProtectedRoute>
-                  <ConnectedPersonal />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/connected-anonymous"
-              element={
-                <ConnectedAnonymous />
-              }
-            />
-          </Routes>
-        </Router>
-      </TripProvider>
-    </AuthProvider>
+              <Route
+                path="/profile"
+                element={
+                  <ProtectedRoute>
+                    <Profile />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/start-trip"
+                element={
+                  <ProtectedRoute>
+                    <StartTrip />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/blogs"
+                element={
+                  <ProtectedRoute>
+                    <Blog />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/settings"
+                element={
+                  <ProtectedRoute>
+                    <Settings />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/live-connection"
+                element={
+                  <ProtectedRoute>
+                    <LiveConnection />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/waiting-room"
+                element={
+                  <ProtectedRoute>
+                    <WaitingRoom />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/carpooling"
+                element={
+                  <ProtectedRoute>
+                    <Carpooling />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/offer-ride"
+                element={
+                  <ProtectedRoute>
+                    <OfferRide />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/live-carpool"
+                element={
+                  <ProtectedRoute>
+                    <LiveCarpoolConnection />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/chat-history"
+                element={
+                  <ProtectedRoute>
+                    <ChatHistory />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/connected-personal"
+                element={
+                  <ProtectedRoute>
+                    <ConnectedPersonal />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/connected-anonymous"
+                element={
+                  <ConnectedAnonymous />
+                }
+              />
+
+              {/* Catch-all route to prevent blank page on unrecognized paths */}
+              <Route path="*" element={<LandingPage />} />
+            </Routes>
+          </Router>
+        </TripProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

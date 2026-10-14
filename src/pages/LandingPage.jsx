@@ -9,21 +9,25 @@ import AuthModal from '../components/auth/AuthModal';
 
 function LandingPage() {
     const [isAuthOpen, setIsAuthOpen] = useState(false);
+    const [authInitialView, setAuthInitialView] = useState('login');
 
-    const openAuth = () => setIsAuthOpen(true);
+    const openAuth = (view = 'login') => {
+        setAuthInitialView(view);
+        setIsAuthOpen(true);
+    };
     const closeAuth = () => setIsAuthOpen(false);
 
     return (
         <div className="font-sans antialiased text-gray-900 bg-white min-h-screen flex flex-col">
-            <Navbar onAuthClick={openAuth} />
+            <Navbar onAuthClick={() => openAuth('login')} />
             <main className="flex-grow">
-                <Hero />
+                <Hero onGetStarted={() => openAuth('signup_step1')} />
                 <About />
                 <Services />
-                <Join onAuthClick={openAuth} />
+                <Join onAuthClick={() => openAuth('signup_step1')} />
             </main>
             <Footer />
-            <AuthModal isOpen={isAuthOpen} onClose={closeAuth} />
+            <AuthModal isOpen={isAuthOpen} onClose={closeAuth} initialView={authInitialView} />
         </div>
     );
 }
