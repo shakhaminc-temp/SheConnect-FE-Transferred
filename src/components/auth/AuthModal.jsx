@@ -300,15 +300,20 @@ const AuthModal = ({ isOpen, onClose, initialView = 'login' }) => {
         } catch (error) {
             console.error("Signup error:", error);
 
-            let errorMessage = "Signup failed";
+            let errorMessage = "Signup failed. Please try again.";
 
             if (error.response?.data?.detail) {
                 if (Array.isArray(error.response.data.detail)) {
-                    // FastAPI validation errors come as array
-                    errorMessage = error.response.data.detail[0].msg;
-                } else {
+                    errorMessage = error.response.data.detail.map(d => d.msg || JSON.stringify(d)).join(", ");
+                } else if (typeof error.response.data.detail === 'string') {
                     errorMessage = error.response.data.detail;
                 }
+            } else if (error.response?.data?.message) {
+                errorMessage = error.response.data.message;
+            } else if (error.message === "Network Error") {
+                errorMessage = "Network Error: Could not connect to the backend server. Please verify your API URL.";
+            } else if (error.message) {
+                errorMessage = error.message;
             }
 
             setMessage({
@@ -342,9 +347,13 @@ const AuthModal = ({ isOpen, onClose, initialView = 'login' }) => {
             }, 2000);
 
         } catch (error) {
+            let detail = error.response?.data?.detail;
+            if (Array.isArray(detail)) {
+                detail = detail.map(d => d.msg || JSON.stringify(d)).join(", ");
+            }
             setMessage({
                 type: "error",
-                text: error.response?.data?.detail || "Verification failed"
+                text: detail || error.message || "Verification failed"
             });
             setLoading(false);
         }
