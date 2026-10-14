@@ -1,6 +1,6 @@
 import React from 'react';
 
-const Hero = () => {
+const Hero = ({ onGetStarted }) => {
     return (
         <section id="home" className="relative pt-20 pb-32 flex flex-col items-center justify-center text-center px-4 overflow-hidden">
             {/* Background decoration */}
@@ -19,12 +19,18 @@ const Hero = () => {
                     Join a community of inspiring women. Network, learn, and grow together in a supportive environment designed for your success.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-                    <button className="px-8 py-4 bg-pink-600 text-white rounded-full font-semibold text-lg hover:bg-pink-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-1">
+                    <button
+                        onClick={onGetStarted}
+                        className="px-8 py-4 bg-pink-600 text-white rounded-full font-semibold text-lg hover:bg-pink-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-1"
+                    >
                         Get Started
                     </button>
-                    <button className="px-8 py-4 bg-white text-pink-600 border border-pink-200 rounded-full font-semibold text-lg hover:bg-pink-50 transition-all shadow-md hover:shadow-lg">
+                    <a
+                        href="#about"
+                        className="px-8 py-4 bg-white text-pink-600 border border-pink-200 rounded-full font-semibold text-lg hover:bg-pink-50 transition-all shadow-md hover:shadow-lg inline-flex items-center justify-center"
+                    >
                         Learn More
-                    </button>
+                    </a>
                 </div>
             </div>
 

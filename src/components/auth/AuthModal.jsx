@@ -6,10 +6,17 @@ import ForgotPassword from './ForgotPassword';
 import { useAuth } from '../../context/AuthContext';
 import { loginUser, signupUser, verifySignupOtp, forgotPassword, verifyForgotOtp, resetPassword } from "../../services/authService";
 
-const AuthModal = ({ isOpen, onClose }) => {
+const AuthModal = ({ isOpen, onClose, initialView = 'login' }) => {
     const navigate = useNavigate();
     const { login } = useAuth();
-    const [view, setView] = useState('login'); // login, signup_step1, signup_step2, signup_step3, signup_step4, forgot_email, forgot_otp, forgot_reset
+    const [view, setView] = useState(initialView); // login, signup_step1, signup_step2, signup_step3, signup_step4, forgot_email, forgot_otp, forgot_reset
+
+    // Synchronize view when initialView changes or modal opens
+    React.useEffect(() => {
+        if (isOpen) {
+            setView(initialView);
+        }
+    }, [isOpen, initialView]);
 
     // Login & Common State
     const [email, setEmail] = useState('');
