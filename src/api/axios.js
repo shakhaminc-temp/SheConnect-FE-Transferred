@@ -1,7 +1,9 @@
 
 import axios from 'axios';
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').trim();
+const DEFAULT_API_URL = 'https://shakham.francecentral.cloudapp.azure.com/sheconnect-be';
+const rawBaseUrl = (import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? DEFAULT_API_URL : '')).trim();
+const API_BASE_URL = (rawBaseUrl || DEFAULT_API_URL).replace(/\/+$/, '');
 
 const api = axios.create({
     baseURL: API_BASE_URL,
@@ -36,7 +38,7 @@ api.interceptors.response.use(
         const originalRequest = error.config;
         
         // Prevent infinite loops on /auth/refresh-token itself
-        if (originalRequest.url === '/auth/refresh-token') {
+        if (originalRequest.url === '/auth/refresh-token' || originalRequest.url.endsWith('/auth/refresh-token')) {
             sessionStorage.removeItem('token');
             sessionStorage.removeItem('refresh_token');
             return Promise.reject(error);

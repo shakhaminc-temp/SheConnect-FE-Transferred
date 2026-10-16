@@ -47,8 +47,9 @@ const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => 
         const token = sessionStorage.getItem('token');
         if (!token) return;
 
-        const baseUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin;
-        const wsUrl = baseUrl.replace(/^http/, 'ws') + `/chat/ws?token=${token}`;
+        const DEFAULT_API_URL = 'https://shakham.francecentral.cloudapp.azure.com/sheconnect-be';
+        const rawBaseUrl = (import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? DEFAULT_API_URL : window.location.origin)).trim().replace(/\/+$/, '');
+        const wsUrl = rawBaseUrl.replace(/^http/, 'ws') + `/chat/ws?token=${token}`;
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 

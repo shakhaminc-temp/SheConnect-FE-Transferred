@@ -36,9 +36,7 @@ const Signup = ({
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-    const [collegesList, setCollegesList] = useState([
-        { college_id: 1, college_name: "IMCC" }
-    ]);
+    const [collegesList, setCollegesList] = useState([]);
     
     useEffect(() => {
         let isMounted = true;
