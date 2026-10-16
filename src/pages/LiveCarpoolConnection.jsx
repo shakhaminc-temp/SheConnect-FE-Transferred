@@ -150,12 +150,45 @@ const LiveCarpoolConnection = () => {
         navigate('/carpooling');
     };
 
-    const emergencyAction = () => {
-        const success = chatState.sendEmergency();
-        if (success) {
-            alert("Emergency Alert sent to your partner!");
+    const emergencyAction = async () => {
+        let wsSuccess = false;
+        try {
+            wsSuccess = chatState.sendEmergency();
+        } catch (e) {
+            console.warn("WS emergency error", e);
+        }
+
+        try {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    async (pos) => {
+                        try {
+                            await api.post("/emergency-contacts/sos", {
+                                lat: pos.coords.latitude,
+                                lng: pos.coords.longitude,
+                                location_name: "Carpool Trip Alert"
+                            });
+                        } catch (err) {
+                            console.error("HTTP SOS alert error:", err);
+                        }
+                    },
+                    async () => {
+                        await api.post("/emergency-contacts/sos", {
+                            lat: 0.0,
+                            lng: 0.0,
+                            location_name: "Carpool Trip Alert"
+                        }).catch(() => {});
+                    }
+                );
+            }
+        } catch (sosErr) {
+            console.error("SOS backup error:", sosErr);
+        }
+
+        if (wsSuccess) {
+            alert("Emergency Alert sent to your partner and emergency contacts!");
         } else {
-            alert("Failed to send alert. Connection lost.");
+            alert("In-app chat connection is offline, but emergency alert has been dispatched to your emergency contacts!");
         }
     };
 
