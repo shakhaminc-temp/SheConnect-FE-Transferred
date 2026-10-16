@@ -6,6 +6,10 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 
+# Build arguments for Vite environment
+ARG VITE_API_BASE_URL=https://shakham.francecentral.cloudapp.azure.com/sheconnect-be
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+
 # Copy source code and build
 COPY . .
 RUN npm run build
