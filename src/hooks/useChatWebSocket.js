@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getChatMessages } from '../services/chatService'; // Correct import
+import { getChatMessages } from '../services/chatService';
 
 const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => {
     const [messages, setMessages] = useState([]);
@@ -11,14 +11,14 @@ const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => 
     const wsRef = useRef(null);
     const reconnectTimeoutRef = useRef(null);
     const reconnectAttempts = useRef(0);
-    const maxReconnectAttempts = 5;
+    const maxReconnectAttempts = 50;
+    const pingIntervalRef = useRef(null);
 
     const unreadMessagesRef = useRef(new Set());
     const readReceiptBatchRef = useRef([]);
     const readReceiptTimeoutRef = useRef(null);
     const typingTimeoutRef = useRef(null);
     const lastTypingSentRef = useRef(false);
-    const lastLocationSentTimeRef = useRef(0);
 
     // Fetch initial chat history
     useEffect(() => {
@@ -26,8 +26,8 @@ const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => 
 
         const loadHistory = async () => {
             try {
-                const chatHistory = await getChatMessages(partnerUserId, requestId, 50, 0); // Use correct function
-                const sorted = chatHistory.messages.sort(
+                const chatHistory = await getChatMessages(partnerUserId, requestId, 50, 0);
+                const sorted = (chatHistory?.messages || []).sort(
                     (a, b) => new Date(a.created_at) - new Date(b.created_at)
                 );
                 setMessages(sorted);
@@ -37,12 +37,12 @@ const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => 
         };
 
         loadHistory();
-    }, [partnerUserId]);
+    }, [partnerUserId, requestId]);
 
     // Connect WebSocket
     const connect = useCallback(() => {
         if (!partnerUserId || readOnly) return;
-        if (wsRef.current?.readyState === WebSocket.OPEN) return;
+        if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) return;
 
         const token = sessionStorage.getItem('token');
         if (!token) return;
@@ -50,79 +50,106 @@ const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => 
         const DEFAULT_API_URL = 'https://shakham.francecentral.cloudapp.azure.com/sheconnect-be';
         const rawBaseUrl = (import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? DEFAULT_API_URL : window.location.origin)).trim().replace(/\/+$/, '');
         const wsUrl = rawBaseUrl.replace(/^http/, 'ws') + `/chat/ws?token=${token}`;
-        const ws = new WebSocket(wsUrl);
-        wsRef.current = ws;
+        
+        try {
+            const ws = new WebSocket(wsUrl);
+            wsRef.current = ws;
 
-        ws.onopen = () => {
-            setIsConnected(true);
-            reconnectAttempts.current = 0;
-        };
+            ws.onopen = () => {
+                setIsConnected(true);
+                reconnectAttempts.current = 0;
 
-        ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
+                // Send heartbeat every 20s to prevent reverse-proxy timeouts
+                if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
+                pingIntervalRef.current = setInterval(() => {
+                    if (wsRef.current?.readyState === WebSocket.OPEN) {
+                        try {
+                            wsRef.current.send(JSON.stringify({ type: 'ping' }));
+                        } catch (err) {
+                            console.warn("Ping failed", err);
+                        }
+                    }
+                }, 20000);
+            };
 
-                switch (data.type) {
-                    case 'message':
-                        setMessages((prev) => [...prev, data]);
-                        break;
-                    case 'message_sent':
-                        setMessages((prev) =>
-                            prev.map((msg) =>
-                                msg.placeholderId === data.placeholderId
-                                    ? { ...msg, ...data, status: 'sent', placeholderId: undefined }
-                                    : msg
-                            )
-                        );
-                        break;
-                    case 'typing':
-                        if (String(data.senderId) === String(partnerUserId)) setIsTyping(data.isTyping);
-                        break;
-                    case 'receipt':
-                        if (data.chat_ids?.length) {
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+
+                    switch (data.type) {
+                        case 'pong':
+                            break;
+                        case 'message':
+                            setMessages((prev) => [...prev, data]);
+                            break;
+                        case 'message_sent':
                             setMessages((prev) =>
                                 prev.map((msg) =>
-                                    data.chat_ids.includes(msg.chat_id)
-                                        ? { ...msg, status: 'read' }
+                                    msg.placeholderId === data.placeholderId
+                                        ? { ...msg, ...data, status: 'sent', placeholderId: undefined }
                                         : msg
                                 )
                             );
-                        }
-                        break;
-                    case 'location':
-                        if (String(data.senderId) === String(partnerUserId))
-                            setPartnerLocation({ lat: data.lat, lng: data.lng, timestamp: data.timestamp });
-                        break;
-                    case 'emergency':
-                        if (String(data.senderId) === String(partnerUserId))
-                            setEmergencyAlert(data);
-                        break;
-                    default:
-                        break;
+                            break;
+                        case 'typing':
+                            if (String(data.senderId) === String(partnerUserId)) setIsTyping(data.isTyping);
+                            break;
+                        case 'receipt':
+                            if (data.chat_ids?.length) {
+                                setMessages((prev) =>
+                                    prev.map((msg) =>
+                                        data.chat_ids.includes(msg.chat_id)
+                                            ? { ...msg, status: 'read' }
+                                            : msg
+                                    )
+                                );
+                            }
+                            break;
+                        case 'location':
+                            if (String(data.senderId) === String(partnerUserId))
+                                setPartnerLocation({ lat: data.lat, lng: data.lng, timestamp: data.timestamp });
+                            break;
+                        case 'emergency':
+                            if (String(data.senderId) === String(partnerUserId))
+                                setEmergencyAlert(data);
+                            break;
+                        default:
+                            break;
+                    }
+                } catch (err) {
+                    console.error('Failed to parse WS message', err);
                 }
-            } catch (err) {
-                console.error('Failed to parse WS message', err);
-            }
-        };
+            };
 
-        ws.onclose = () => {
-            setIsConnected(false);
-            wsRef.current = null;
-            if (reconnectAttempts.current < maxReconnectAttempts) {
-                const timeout = Math.min(10000, 1000 * 2 ** reconnectAttempts.current);
-                reconnectTimeoutRef.current = setTimeout(() => {
-                    reconnectAttempts.current += 1;
-                    connect();
-                }, timeout);
-            }
-        };
+            ws.onclose = () => {
+                setIsConnected(false);
+                if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
+                wsRef.current = null;
+                if (reconnectAttempts.current < maxReconnectAttempts) {
+                    const timeout = Math.min(8000, 1000 * (1.5 ** reconnectAttempts.current));
+                    reconnectTimeoutRef.current = setTimeout(() => {
+                        reconnectAttempts.current += 1;
+                        connect();
+                    }, timeout);
+                }
+            };
 
-        ws.onerror = () => ws.close();
-    }, [partnerUserId]);
+            ws.onerror = () => {
+                try {
+                    ws.close();
+                } catch (e) {
+                    // ignore
+                }
+            };
+        } catch (e) {
+            console.error("WebSocket init error:", e);
+        }
+    }, [partnerUserId, readOnly]);
 
     useEffect(() => {
         connect();
         return () => {
+            if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
             if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
             if (wsRef.current) wsRef.current.close();
         };
@@ -145,7 +172,7 @@ const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => 
 
             return true;
         },
-        [partnerUserId]
+        [partnerUserId, requestId]
     );
 
     const sendTyping = useCallback(() => {
