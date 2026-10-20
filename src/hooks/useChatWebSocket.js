@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getChatMessages } from '../services/chatService';
+import api from '../api/axios';
 
 const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => {
     const [messages, setMessages] = useState([]);
@@ -156,21 +157,53 @@ const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => 
     }, [connect]);
 
     const sendMessage = useCallback(
-        (text) => {
+        async (text) => {
             const trimmed = text.trim();
             if (!trimmed || trimmed.length > 2000) return false;
-            if (wsRef.current?.readyState !== WebSocket.OPEN) return false;
 
             const placeholderId = 'temp-' + Date.now();
-            const payload = { type: 'message', receiverId: partnerUserId, message: trimmed, placeholderId, request_id: requestId };
-            wsRef.current.send(JSON.stringify(payload));
-
             setMessages((prev) => [
                 ...prev,
                 { placeholderId, message: trimmed, senderId: 'me', created_at: new Date().toISOString(), status: 'sending' },
             ]);
 
-            return true;
+            if (wsRef.current?.readyState === WebSocket.OPEN) {
+                try {
+                    const payload = { type: 'message', receiverId: partnerUserId, message: trimmed, placeholderId, request_id: requestId };
+                    wsRef.current.send(JSON.stringify(payload));
+                    return true;
+                } catch (err) {
+                    console.warn("WS send failed, falling back to HTTP:", err);
+                }
+            }
+
+            // Fallback via HTTP REST
+            try {
+                const res = await api.post('/chat/send', {
+                    receiverId: partnerUserId,
+                    message: trimmed
+                });
+                if (res.data?.chat) {
+                    setMessages((prev) =>
+                        prev.map((msg) =>
+                            msg.placeholderId === placeholderId
+                                ? { ...msg, ...res.data.chat, status: 'sent', placeholderId: undefined }
+                                : msg
+                        )
+                    );
+                }
+                return true;
+            } catch (httpErr) {
+                console.error("HTTP chat send error:", httpErr);
+                setMessages((prev) =>
+                    prev.map((msg) =>
+                        msg.placeholderId === placeholderId
+                            ? { ...msg, status: 'error' }
+                            : msg
+                    )
+                );
+                return false;
+            }
         },
         [partnerUserId, requestId]
     );
@@ -210,10 +243,47 @@ const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => 
         [partnerUserId]
     );
 
-    const sendEmergency = useCallback(() => {
-        if (wsRef.current?.readyState !== WebSocket.OPEN) return false;
-        wsRef.current.send(JSON.stringify({ type: 'emergency', receiverId: partnerUserId }));
-        return true;
+    // Fallback HTTP check for partner emergency (works even when WS is reconnecting or down)
+    useEffect(() => {
+        if (!partnerUserId || readOnly) return;
+
+        let intervalId;
+        const checkEmergency = async () => {
+            try {
+                const res = await api.get(`/chat/emergency-partner/check?partner_id=${partnerUserId}`);
+                if (res.data?.has_emergency && res.data.emergency) {
+                    setEmergencyAlert(res.data.emergency);
+                }
+            } catch (e) {
+                // Ignore polling errors silently
+            }
+        };
+
+        checkEmergency();
+        intervalId = setInterval(checkEmergency, 4000);
+        return () => clearInterval(intervalId);
+    }, [partnerUserId, readOnly]);
+
+    const sendEmergency = useCallback(async () => {
+        let sent = false;
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+            try {
+                wsRef.current.send(JSON.stringify({ type: 'emergency', receiverId: partnerUserId }));
+                sent = true;
+            } catch (err) {
+                console.warn("WebSocket sendEmergency error:", err);
+            }
+        }
+
+        // Always call HTTP fallback to guarantee delivery and notification
+        try {
+            await api.post(`/chat/emergency-partner?partner_id=${partnerUserId}`);
+            sent = true;
+        } catch (httpErr) {
+            console.error("HTTP emergency-partner error:", httpErr);
+        }
+
+        return sent;
     }, [partnerUserId]);
 
     return { 
