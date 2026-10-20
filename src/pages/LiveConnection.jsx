@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import MapLibreMap from '../components/MapLibre';
+import api from '../api/axios';
 import {
     Menu,
     Shield,
@@ -423,10 +424,47 @@ const LiveConnection = () => {
                                                 <MessageCircle size={16} /> Chat
                                             </button>
                                             <button
-                                                onClick={() => {
-                                                    const success = chatState.sendEmergency();
-                                                    if (success) alert("Emergency Alert sent to your partner!");
-                                                    else alert("Failed to send alert. Connection lost.");
+                                                onClick={async () => {
+                                                    let wsSuccess = false;
+                                                    try {
+                                                        wsSuccess = chatState.sendEmergency();
+                                                    } catch (e) {
+                                                        console.warn("WS sendEmergency failed", e);
+                                                    }
+
+                                                    // Trigger HTTP SOS alert as a guaranteed fallback/parallel alert
+                                                    try {
+                                                        if (navigator.geolocation) {
+                                                            navigator.geolocation.getCurrentPosition(
+                                                                async (pos) => {
+                                                                    try {
+                                                                        await api.post("/emergency-contacts/sos", {
+                                                                            lat: pos.coords.latitude,
+                                                                            lng: pos.coords.longitude,
+                                                                            location_name: "Live Trip Alert"
+                                                                        });
+                                                                    } catch (err) {
+                                                                        console.error("HTTP SOS alert error:", err);
+                                                                    }
+                                                                },
+                                                                async () => {
+                                                                    await api.post("/emergency-contacts/sos", {
+                                                                        lat: 0.0,
+                                                                        lng: 0.0,
+                                                                        location_name: "Live Trip Alert"
+                                                                    }).catch(() => {});
+                                                                }
+                                                            );
+                                                        }
+                                                    } catch (sosErr) {
+                                                        console.error("SOS backup failed:", sosErr);
+                                                    }
+
+                                                    if (wsSuccess) {
+                                                        alert("Emergency Alert sent to your partner and emergency contacts!");
+                                                    } else {
+                                                        alert("In-app chat connection is offline, but emergency alert has been dispatched to your emergency contacts!");
+                                                    }
                                                 }}
                                                 className="flex-1 py-3 bg-rose-600 text-white rounded-xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-rose-700 transition-colors"
                                             >

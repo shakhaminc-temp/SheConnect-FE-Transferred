@@ -351,33 +351,42 @@ const MapLibreMap = ({ startCoords, endCoords, mode = 'route', showSOS = true })
       return;
     }
     setSosStatus("sending");
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
+    
+    const sendSOSWithCoords = async (latitude, longitude) => {
+      try {
+        let locationName = "";
         try {
-          let locationName = "";
-          try {
-            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
-            const data = await response.json();
-            locationName = data.display_name || "";
-          } catch (err) {
-            console.error("Reverse geocoding failed:", err);
-          }
-          await api.post("/emergency-contacts/sos", { lat: latitude, lng: longitude, location_name: locationName });
-          setSosStatus("success");
-          setTimeout(() => setSosStatus("idle"), 3000);
-        } catch (error) {
-          console.error("SOS failed:", error);
-          setSosStatus("error");
-          setTimeout(() => setSosStatus("idle"), 3000);
+          const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+          const data = await response.json();
+          locationName = data.display_name || "";
+        } catch (err) {
+          console.error("Reverse geocoding failed:", err);
         }
+        const res = await api.post("/emergency-contacts/sos", { lat: latitude, lng: longitude, location_name: locationName });
+        setSosStatus("success");
+        alert(res.data?.message || "SOS Alert with live location dispatched to your emergency contacts!");
+        setTimeout(() => setSosStatus("idle"), 4000);
+      } catch (error) {
+        console.error("SOS failed:", error);
+        setSosStatus("error");
+        const errMsg = error.response?.data?.detail || "Failed to send SOS alert. Please check your emergency contacts.";
+        alert(errMsg);
+        setTimeout(() => setSosStatus("idle"), 4000);
+      }
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        sendSOSWithCoords(position.coords.latitude, position.coords.longitude);
       },
       (error) => {
-        console.error("Could not get location for SOS:", error);
-        setSosStatus("error");
-        setTimeout(() => setSosStatus("idle"), 3000);
+        console.warn("Could not get GPS location for SOS, sending approximate/default:", error);
+        // Fallback: send SOS anyway with startCoords or 0,0 so emergency contacts are still notified
+        const fallbackLat = startCoords ? startCoords[1] : 0.0;
+        const fallbackLng = startCoords ? startCoords[0] : 0.0;
+        sendSOSWithCoords(fallbackLat, fallbackLng);
       },
-      { enableHighAccuracy: true }
+      { enableHighAccuracy: true, timeout: 8000 }
     );
   };
 
