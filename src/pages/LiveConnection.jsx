@@ -425,14 +425,14 @@ const LiveConnection = () => {
                                             </button>
                                             <button
                                                 onClick={async () => {
-                                                    let wsSuccess = false;
+                                                    let alertSuccess = false;
                                                     try {
-                                                        wsSuccess = chatState.sendEmergency();
+                                                        alertSuccess = await chatState.sendEmergency();
                                                     } catch (e) {
-                                                        console.warn("WS sendEmergency failed", e);
+                                                        console.warn("sendEmergency failed", e);
                                                     }
 
-                                                    // Trigger HTTP SOS alert as a guaranteed fallback/parallel alert
+                                                    // Trigger HTTP SOS alert as a guaranteed fallback/parallel alert to emergency contacts
                                                     try {
                                                         if (navigator.geolocation) {
                                                             navigator.geolocation.getCurrentPosition(
@@ -455,15 +455,21 @@ const LiveConnection = () => {
                                                                     }).catch(() => {});
                                                                 }
                                                             );
+                                                        } else {
+                                                            await api.post("/emergency-contacts/sos", {
+                                                                lat: 0.0,
+                                                                lng: 0.0,
+                                                                location_name: "Live Trip Alert"
+                                                            }).catch(() => {});
                                                         }
                                                     } catch (sosErr) {
                                                         console.error("SOS backup failed:", sosErr);
                                                     }
 
-                                                    if (wsSuccess) {
-                                                        alert("Emergency Alert sent to your partner and emergency contacts!");
+                                                    if (alertSuccess) {
+                                                        alert("🚨 Emergency alert dispatched to your connected partner and emergency contacts!");
                                                     } else {
-                                                        alert("In-app chat connection is offline, but emergency alert has been dispatched to your emergency contacts!");
+                                                        alert("Emergency alert dispatched to your registered emergency contacts!");
                                                     }
                                                 }}
                                                 className="flex-1 py-3 bg-rose-600 text-white rounded-xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-rose-700 transition-colors"

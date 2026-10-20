@@ -203,15 +203,14 @@ const Chatroom = ({ partner, onClose, chatState, readOnly = false }) => {
                                     handleSend(e);
                                 }
                             }}
-                            disabled={!isConnected}
                             maxLength={2000}
-                            placeholder={isConnected ? "Type a message..." : "Waiting for connection..."}
-                            className="flex-1 max-h-32 min-h-[48px] bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm font-medium text-gray-800 focus:outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-100 transition-all resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+                            placeholder="Type a message..."
+                            className="flex-1 max-h-32 min-h-[48px] bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm font-medium text-gray-800 focus:outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-100 transition-all resize-none"
                             rows={1}
                         />
                         <button
                             type="submit"
-                            disabled={!newMessage.trim() || !isConnected}
+                            disabled={!newMessage.trim()}
                             className="w-12 h-12 flex-shrink-0 bg-gray-900 text-white rounded-2xl flex items-center justify-center hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed group"
                         >
                             <Send size={18} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />

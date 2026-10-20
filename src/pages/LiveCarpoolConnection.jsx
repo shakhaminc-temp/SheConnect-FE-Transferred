@@ -151,11 +151,11 @@ const LiveCarpoolConnection = () => {
     };
 
     const emergencyAction = async () => {
-        let wsSuccess = false;
+        let alertSuccess = false;
         try {
-            wsSuccess = chatState.sendEmergency();
+            alertSuccess = await chatState.sendEmergency();
         } catch (e) {
-            console.warn("WS emergency error", e);
+            console.warn("sendEmergency error", e);
         }
 
         try {
@@ -180,15 +180,21 @@ const LiveCarpoolConnection = () => {
                         }).catch(() => {});
                     }
                 );
+            } else {
+                await api.post("/emergency-contacts/sos", {
+                    lat: 0.0,
+                    lng: 0.0,
+                    location_name: "Carpool Trip Alert"
+                }).catch(() => {});
             }
         } catch (sosErr) {
             console.error("SOS backup error:", sosErr);
         }
 
-        if (wsSuccess) {
-            alert("Emergency Alert sent to your partner and emergency contacts!");
+        if (alertSuccess) {
+            alert("🚨 Emergency Alert sent to your partner and emergency contacts!");
         } else {
-            alert("In-app chat connection is offline, but emergency alert has been dispatched to your emergency contacts!");
+            alert("Emergency alert dispatched to your registered emergency contacts!");
         }
     };
 
