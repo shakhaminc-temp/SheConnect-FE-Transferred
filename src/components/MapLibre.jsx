@@ -86,36 +86,47 @@ const MapLibreMap = ({ startCoords, endCoords, mode = 'route', showSOS = true })
     };
 
     if ("geolocation" in navigator) {
-      watchIdRef.current = navigator.geolocation.watchPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords;
-          const userLngLat = [longitude, latitude];
+      try {
+        watchIdRef.current = navigator.geolocation.watchPosition(
+          (position) => {
+            const { latitude, longitude } = position.coords;
+            const userLngLat = [longitude, latitude];
 
-          if (!userLocationMarkerRef.current && map.current) {
-            userLocationMarkerRef.current = new maplibregl.Marker({ element: createLiveMarkerElement() })
-              .setLngLat(userLngLat)
-              .addTo(map.current);
-          } else if (userLocationMarkerRef.current) {
-            userLocationMarkerRef.current.setLngLat(userLngLat);
-          }
+            if (!userLocationMarkerRef.current && map.current) {
+              userLocationMarkerRef.current = new maplibregl.Marker({ element: createLiveMarkerElement() })
+                .setLngLat(userLngLat)
+                .addTo(map.current);
+            } else if (userLocationMarkerRef.current) {
+              userLocationMarkerRef.current.setLngLat(userLngLat);
+            }
 
-          if (endCoordsRef.current && map.current && map.current.getSource("route")) {
-             const dist = calculateDistance(lastLocationRef.current, userLngLat);
-             
-             if (lastLocationRef.current === null) {
-                 // Seed the initial location, but don't overwrite the initial route yet
-                 lastLocationRef.current = userLngLat;
-             } else if (dist > 0.02 && dist < 10) { 
-                 // Only recalculate if they actually physically moved > 20 meters.
-                 // (dist < 10km prevents sudden jumps if GPS glitches)
-                 lastLocationRef.current = userLngLat;
-                 fetchLiveRoute(userLngLat);
-             }
-          }
-        },
-        (error) => console.error("Error watching position:", error),
-        { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
-      );
+            if (endCoordsRef.current && map.current && map.current.getSource("route")) {
+               const dist = calculateDistance(lastLocationRef.current, userLngLat);
+               
+               if (lastLocationRef.current === null) {
+                   // Seed the initial location, but don't overwrite the initial route yet
+                   lastLocationRef.current = userLngLat;
+               } else if (dist > 0.02 && dist < 10) { 
+                   // Only recalculate if they actually physically moved > 20 meters.
+                   // (dist < 10km prevents sudden jumps if GPS glitches)
+                   lastLocationRef.current = userLngLat;
+                   fetchLiveRoute(userLngLat);
+               }
+            }
+          },
+          (error) => {
+            // Silently ignore or warn permissions policy / denied errors
+            if (error?.code === 1) {
+              console.warn("Geolocation permission not granted or restricted by policy.");
+            } else {
+              console.warn("Geolocation watch update unavailable:", error?.message);
+            }
+          },
+          { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+        );
+      } catch (err) {
+        console.warn("Geolocation watchPosition blocked:", err);
+      }
     }
 
     return () => {

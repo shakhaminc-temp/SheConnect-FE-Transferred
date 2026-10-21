@@ -158,43 +158,10 @@ const LiveCarpoolConnection = () => {
             console.warn("sendEmergency error", e);
         }
 
-        try {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    async (pos) => {
-                        try {
-                            await api.post("/emergency-contacts/sos", {
-                                lat: pos.coords.latitude,
-                                lng: pos.coords.longitude,
-                                location_name: "Carpool Trip Alert"
-                            });
-                        } catch (err) {
-                            console.error("HTTP SOS alert error:", err);
-                        }
-                    },
-                    async () => {
-                        await api.post("/emergency-contacts/sos", {
-                            lat: 0.0,
-                            lng: 0.0,
-                            location_name: "Carpool Trip Alert"
-                        }).catch(() => {});
-                    }
-                );
-            } else {
-                await api.post("/emergency-contacts/sos", {
-                    lat: 0.0,
-                    lng: 0.0,
-                    location_name: "Carpool Trip Alert"
-                }).catch(() => {});
-            }
-        } catch (sosErr) {
-            console.error("SOS backup error:", sosErr);
-        }
-
         if (alertSuccess) {
-            alert("🚨 Emergency Alert sent to your partner and emergency contacts!");
+            alert("🚨 Emergency alert sent to your partner's screen!");
         } else {
-            alert("Emergency alert dispatched to your registered emergency contacts!");
+            alert("Could not reach partner's screen. If you need immediate assistance, please use the SOS button.");
         }
     };
 

@@ -432,44 +432,10 @@ const LiveConnection = () => {
                                                         console.warn("sendEmergency failed", e);
                                                     }
 
-                                                    // Trigger HTTP SOS alert as a guaranteed fallback/parallel alert to emergency contacts
-                                                    try {
-                                                        if (navigator.geolocation) {
-                                                            navigator.geolocation.getCurrentPosition(
-                                                                async (pos) => {
-                                                                    try {
-                                                                        await api.post("/emergency-contacts/sos", {
-                                                                            lat: pos.coords.latitude,
-                                                                            lng: pos.coords.longitude,
-                                                                            location_name: "Live Trip Alert"
-                                                                        });
-                                                                    } catch (err) {
-                                                                        console.error("HTTP SOS alert error:", err);
-                                                                    }
-                                                                },
-                                                                async () => {
-                                                                    await api.post("/emergency-contacts/sos", {
-                                                                        lat: 0.0,
-                                                                        lng: 0.0,
-                                                                        location_name: "Live Trip Alert"
-                                                                    }).catch(() => {});
-                                                                }
-                                                            );
-                                                        } else {
-                                                            await api.post("/emergency-contacts/sos", {
-                                                                lat: 0.0,
-                                                                lng: 0.0,
-                                                                location_name: "Live Trip Alert"
-                                                            }).catch(() => {});
-                                                        }
-                                                    } catch (sosErr) {
-                                                        console.error("SOS backup failed:", sosErr);
-                                                    }
-
                                                     if (alertSuccess) {
-                                                        alert("🚨 Emergency alert dispatched to your connected partner and emergency contacts!");
+                                                        alert("🚨 Emergency alert sent to your partner's screen!");
                                                     } else {
-                                                        alert("Emergency alert dispatched to your registered emergency contacts!");
+                                                        alert("Could not reach partner's screen. If you need immediate assistance, please use the SOS button.");
                                                     }
                                                 }}
                                                 className="flex-1 py-3 bg-rose-600 text-white rounded-xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-rose-700 transition-colors"
