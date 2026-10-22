@@ -17,6 +17,7 @@ const Chatroom = ({ partner, onClose, chatState, readOnly = false }) => {
         messages = [],
         isTyping = false,
         isConnected = false,
+        isRestOnline = true,
         sendMessage = () => {},
         sendTyping = () => {},
         markAsRead = () => {}
@@ -106,9 +107,9 @@ const Chatroom = ({ partner, onClose, chatState, readOnly = false }) => {
                         <h3 className="text-sm font-black text-gray-900">{partner?.name || 'Partner'}</h3>
                         {!readOnly && (
                             <div className="flex items-center gap-1.5">
-                                <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`}></div>
+                                <div className={`w-1.5 h-1.5 rounded-full ${isConnected || isRestOnline ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`}></div>
                                 <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                                    {isConnected ? 'Online' : 'Reconnecting...'}
+                                    {isConnected || isRestOnline ? 'Online' : 'Offline'}
                                 </span>
                             </div>
                         )}
@@ -122,8 +123,8 @@ const Chatroom = ({ partner, onClose, chatState, readOnly = false }) => {
                 </button>
             </div>
 
-            {/* Error Banner */}
-            {!isConnected && !readOnly && (
+            {/* Error Banner — only show if BOTH WebSocket and REST communication fail */}
+            {!isConnected && !isRestOnline && !readOnly && (
                 <div className="bg-amber-50 px-4 py-2 flex items-center gap-2 text-amber-700 text-xs font-bold w-full shrink-0">
                     <AlertCircle size={14} />
                     Connection lost. Attempting to reconnect...

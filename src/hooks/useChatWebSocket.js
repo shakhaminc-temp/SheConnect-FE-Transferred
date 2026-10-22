@@ -7,6 +7,7 @@ const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => 
     const [isTyping, setIsTyping] = useState(false);
     const [partnerLocation, setPartnerLocation] = useState(null);
     const [isConnected, setIsConnected] = useState(false);
+    const [isRestOnline, setIsRestOnline] = useState(true);
     const [emergencyAlert, setEmergencyAlert] = useState(null);
 
     const wsRef = useRef(null);
@@ -122,12 +123,13 @@ const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => 
                 }
             };
 
-            ws.onclose = () => {
+            ws.onclose = (event) => {
                 setIsConnected(false);
                 if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
                 wsRef.current = null;
-                if (reconnectAttempts.current < maxReconnectAttempts) {
-                    const timeout = Math.min(8000, 1000 * (1.5 ** reconnectAttempts.current));
+                // If closed with 404 or cleanly rejected, back off retries to prevent endless console floods
+                if (reconnectAttempts.current < 5) {
+                    const timeout = Math.min(15000, 2000 * (2 ** reconnectAttempts.current));
                     reconnectTimeoutRef.current = setTimeout(() => {
                         reconnectAttempts.current += 1;
                         connect();
@@ -143,7 +145,7 @@ const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => 
                 }
             };
         } catch (e) {
-            console.error("WebSocket init error:", e);
+            console.warn("WebSocket init unavailable, using HTTP REST fallback.");
         }
     }, [partnerUserId, readOnly]);
 
@@ -243,12 +245,12 @@ const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => 
         [partnerUserId]
     );
 
-    // Fallback HTTP check for partner emergency (works even when WS is reconnecting or down)
+    // Fallback HTTP sync for partner emergency & messages (works even when WS is down or returns 404)
     useEffect(() => {
         if (!partnerUserId || readOnly) return;
 
         let intervalId;
-        const checkEmergency = async () => {
+        const checkEmergencyAndMessages = async () => {
             try {
                 const res = await api.get(`/chat/emergency-partner/check?partner_id=${partnerUserId}`);
                 if (res.data?.has_emergency && res.data.emergency) {
@@ -257,12 +259,30 @@ const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => 
             } catch (e) {
                 // Ignore polling errors silently
             }
+
+            // If WebSocket is not open, periodically sync chat messages via REST
+            if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+                try {
+                    const chatHistory = await getChatMessages(partnerUserId, requestId, 50, 0);
+                    const sorted = (chatHistory?.messages || []).sort(
+                        (a, b) => new Date(a.created_at) - new Date(b.created_at)
+                    );
+                    setMessages((prev) => {
+                        if (sorted.length > prev.length) {
+                            return sorted;
+                        }
+                        return prev;
+                    });
+                } catch (e) {
+                    // Ignore message poll error
+                }
+            }
         };
 
-        checkEmergency();
-        intervalId = setInterval(checkEmergency, 4000);
+        checkEmergencyAndMessages();
+        intervalId = setInterval(checkEmergencyAndMessages, 4000);
         return () => clearInterval(intervalId);
-    }, [partnerUserId, readOnly]);
+    }, [partnerUserId, requestId, readOnly]);
 
     const sendEmergency = useCallback(async () => {
         let sent = false;
@@ -287,7 +307,7 @@ const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => 
     }, [partnerUserId]);
 
     return { 
-        messages, isTyping, partnerLocation, isConnected, 
+        messages, isTyping, partnerLocation, isConnected, isRestOnline,
         sendMessage, sendTyping, markAsRead,
         emergencyAlert, setEmergencyAlert, sendEmergency
     };

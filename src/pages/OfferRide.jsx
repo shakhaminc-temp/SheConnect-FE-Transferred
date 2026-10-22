@@ -4,7 +4,7 @@ import { MapPin, Calendar, Users, IndianRupee, ArrowRight, Loader2, CheckCircle2
 import Sidebar from '../components/Sidebar';
 import LocationInput from '../components/LocationInput';
 import MapLibreMap from '../components/MapLibre';
-import { offerRide, getRideRequests, approveRequest } from '../services/carpoolService';
+import { offerRide, getRideRequests, approveRequest, searchSeeks, inviteRider } from '../services/carpoolService';
 import { useAuth } from '../context/AuthContext';
 import { getCoordsFromLocation } from '../utils/getCoordsFromLocation';
 
@@ -109,7 +109,6 @@ const OfferRide = () => {
             setRequests(reqs);
             
             try {
-                const { searchSeeks } = await import('../services/carpoolService');
                 const seeks = await searchSeeks(activeRide.start_location, activeRide.end_location);
                 setPotentialRiders(seeks);
             } catch (seekErr) {
@@ -191,7 +190,6 @@ const OfferRide = () => {
 
     const handleInvite = async (riderId) => {
         try {
-            const { inviteRider } = await import('../services/carpoolService');
             await inviteRider(activeRide.ride_id, riderId);
             alert('Invite sent to rider!');
             fetchRequests();
