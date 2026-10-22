@@ -82,7 +82,12 @@ const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => 
                         case 'pong':
                             break;
                         case 'message':
-                            setMessages((prev) => [...prev, data]);
+                            setMessages((prev) => {
+                                if (data.chat_id && prev.some((m) => m.chat_id === data.chat_id)) {
+                                    return prev;
+                                }
+                                return [...prev, data];
+                            });
                             break;
                         case 'message_sent':
                             setMessages((prev) =>
@@ -127,14 +132,12 @@ const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => 
                 setIsConnected(false);
                 if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
                 wsRef.current = null;
-                // If closed with 404 or cleanly rejected, back off retries to prevent endless console floods
-                if (reconnectAttempts.current < 5) {
-                    const timeout = Math.min(15000, 2000 * (2 ** reconnectAttempts.current));
-                    reconnectTimeoutRef.current = setTimeout(() => {
-                        reconnectAttempts.current += 1;
-                        connect();
-                    }, timeout);
-                }
+                // Exponential backoff capped at 5 seconds, retrying continuously
+                const timeout = Math.min(5000, 1000 * (1.5 ** Math.min(reconnectAttempts.current, 6)));
+                reconnectAttempts.current += 1;
+                reconnectTimeoutRef.current = setTimeout(() => {
+                    connect();
+                }, timeout);
             };
 
             ws.onerror = () => {
@@ -245,6 +248,26 @@ const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => 
         [partnerUserId]
     );
 
+    const acknowledgedEmergencyIdsRef = useRef(new Set());
+
+    const acknowledgeEmergency = useCallback(async () => {
+        if (emergencyAlert?.id) {
+            acknowledgedEmergencyIdsRef.current.add(String(emergencyAlert.id));
+        }
+        if (emergencyAlert?.timestamp) {
+            acknowledgedEmergencyIdsRef.current.add(String(emergencyAlert.timestamp));
+        }
+        setEmergencyAlert(null);
+
+        if (partnerUserId) {
+            try {
+                await api.post(`/chat/emergency-partner/acknowledge?partner_id=${partnerUserId}`);
+            } catch (err) {
+                console.warn("Failed to acknowledge emergency via API:", err);
+            }
+        }
+    }, [emergencyAlert, partnerUserId]);
+
     // Fallback HTTP sync for partner emergency & messages (works even when WS is down or returns 404)
     useEffect(() => {
         if (!partnerUserId || readOnly) return;
@@ -254,28 +277,39 @@ const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => 
             try {
                 const res = await api.get(`/chat/emergency-partner/check?partner_id=${partnerUserId}`);
                 if (res.data?.has_emergency && res.data.emergency) {
-                    setEmergencyAlert(res.data.emergency);
+                    const em = res.data.emergency;
+                    const idKey = em.id ? String(em.id) : null;
+                    const tsKey = em.timestamp ? String(em.timestamp) : null;
+
+                    if ((!idKey || !acknowledgedEmergencyIdsRef.current.has(idKey)) &&
+                        (!tsKey || !acknowledgedEmergencyIdsRef.current.has(tsKey))) {
+                        setEmergencyAlert(em);
+                    }
                 }
             } catch (e) {
                 // Ignore polling errors silently
             }
 
-            // If WebSocket is not open, periodically sync chat messages via REST
-            if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-                try {
-                    const chatHistory = await getChatMessages(partnerUserId, requestId, 50, 0);
-                    const sorted = (chatHistory?.messages || []).sort(
-                        (a, b) => new Date(a.created_at) - new Date(b.created_at)
-                    );
+            // Periodically sync chat messages via REST to ensure no messages are lost even if WS dropped
+            try {
+                const chatHistory = await getChatMessages(partnerUserId, requestId, 50, 0);
+                const sorted = (chatHistory?.messages || []).sort(
+                    (a, b) => new Date(a.created_at) - new Date(b.created_at)
+                );
+                if (sorted.length > 0) {
                     setMessages((prev) => {
-                        if (sorted.length > prev.length) {
-                            return sorted;
+                        const existingIds = new Set(prev.map((m) => m.chat_id).filter(Boolean));
+                        const newOnes = sorted.filter((m) => !existingIds.has(m.chat_id));
+                        if (newOnes.length > 0) {
+                            return [...prev, ...newOnes].sort(
+                                (a, b) => new Date(a.created_at) - new Date(b.created_at)
+                            );
                         }
                         return prev;
                     });
-                } catch (e) {
-                    // Ignore message poll error
                 }
+            } catch (e) {
+                // Ignore message poll error
             }
         };
 
@@ -309,7 +343,7 @@ const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => 
     return { 
         messages, isTyping, partnerLocation, isConnected, isRestOnline,
         sendMessage, sendTyping, markAsRead,
-        emergencyAlert, setEmergencyAlert, sendEmergency
+        emergencyAlert, setEmergencyAlert, acknowledgeEmergency, sendEmergency
     };
 };
 
