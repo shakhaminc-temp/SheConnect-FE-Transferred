@@ -3,6 +3,7 @@ import { createTrip as apiCreateTrip, getMyTrips, getTripMatches, sendTripReques
 import { useAuth } from './AuthContext';
 
 import { getCoordsFromLocation } from '../utils/getCoordsFromLocation';
+import { triggerSOS } from '../services/sosService';
 
 const normalizeCoords = (coords) => {
     if (!coords) return null;
@@ -418,7 +419,15 @@ export const TripProvider = ({ children }) => {
 
     const retryMatching = useCallback(() => setTripStatus(TRIP_STATUS.WAITING), []);
     const triggerTimeout = useCallback(() => setTripStatus(TRIP_STATUS.TIMEOUT), []);
-    const emergencyAction = useCallback(() => alert("Emergency Action Triggered!"), []);
+    const emergencyAction = useCallback(async (customFallbackCoords = null) => {
+        try {
+            const fallback = customFallbackCoords || (activeTrip?.start ? [activeTrip.start.lng, activeTrip.start.lat] : null);
+            const res = await triggerSOS(fallback);
+            alert(res.message || "🚨 SOS Alert dispatched to your emergency contacts!");
+        } catch (err) {
+            alert(err.message || "Failed to trigger SOS alert.");
+        }
+    }, [activeTrip]);
 
     const contextValue = useMemo(() => ({
         tripStatus, activeTrip, matches, sentRequests, receivedRequests, connectedPartner,

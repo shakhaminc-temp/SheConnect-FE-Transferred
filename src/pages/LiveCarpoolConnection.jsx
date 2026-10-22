@@ -28,6 +28,7 @@ import { getCoordsFromLocation } from '../utils/getCoordsFromLocation';
 import { rateRide, completeRide } from '../services/carpoolService';
 import Chatroom from '../components/Chatroom';
 import useChatWebSocket from '../hooks/useChatWebSocket';
+import { triggerSOS } from '../services/sosService';
 
 const LiveCarpoolConnection = () => {
     const navigate = useNavigate();
@@ -256,13 +257,20 @@ const LiveCarpoolConnection = () => {
                                 <LogOut size={16} /> End Trip
                             </button>
 
-                            {/* Emergency */}
-                            {/* <button
-                                onClick={emergencyAction}
-                                className="px-6 py-4 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-700 transition-all flex items-center gap-2 shadow-[0_8px_16px_-4px_rgba(225,29,72,0.3)]"
+                            {/* SOS Button — always visible during active trip to email emergency contacts */}
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        const res = await triggerSOS(startCoords);
+                                        alert(res.message || "🚨 SOS Alert dispatched to your emergency contacts!");
+                                    } catch (err) {
+                                        alert(err.message || "Failed to trigger SOS alert.");
+                                    }
+                                }}
+                                className="px-6 py-4 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-700 transition-all flex items-center gap-2 shadow-[0_8px_16px_-4px_rgba(225,29,72,0.4)] animate-pulse"
                             >
                                 <AlertCircle size={16} /> SOS
-                            </button> */}
+                            </button>
                         </div>
                     </div>
 
@@ -521,7 +529,7 @@ const LiveCarpoolConnection = () => {
                             )}
                         </div>
                         <button
-                            onClick={() => chatState.setEmergencyAlert(false)}
+                            onClick={() => (chatState.acknowledgeEmergency ? chatState.acknowledgeEmergency() : chatState.setEmergencyAlert(false))}
                             className="w-full py-4 bg-gray-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-gray-800 transition-all shadow-xl"
                         >
                             Acknowledge

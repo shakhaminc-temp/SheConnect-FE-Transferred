@@ -37,7 +37,8 @@ const Chatroom = ({ partner, onClose, chatState, readOnly = false }) => {
         if (!node) return;
 
         // If node represents an incoming, unread message, observe it
-        const isIncoming = node.dataset.senderId !== String(user?.id);
+        const currentUserId = String(user?.id || user?.user_id || '');
+        const isIncoming = node.dataset.senderId !== currentUserId && node.dataset.senderId !== 'me';
         const isUnread = node.dataset.status !== 'read';
         const chatId = node.dataset.chatId;
 
@@ -66,12 +67,12 @@ const Chatroom = ({ partner, onClose, chatState, readOnly = false }) => {
         };
     }, []);
 
-    const handleSend = (e) => {
+    const handleSend = async (e) => {
         e.preventDefault();
         const trimmed = newMessage.trim();
         if (!trimmed || trimmed.length > 2000) return;
 
-        const success = sendMessage(trimmed);
+        const success = await sendMessage(trimmed);
         if (success) {
             setNewMessage('');
         }
