@@ -391,10 +391,20 @@ const MapLibreMap = ({ startCoords, endCoords, mode = 'route', showSOS = true })
         sendSOSWithCoords(position.coords.latitude, position.coords.longitude);
       },
       (error) => {
-        console.warn("Could not get GPS location for SOS, sending approximate/default:", error);
-        // Fallback: send SOS anyway with startCoords or 0,0 so emergency contacts are still notified
-        const fallbackLat = startCoords ? startCoords[1] : 0.0;
-        const fallbackLng = startCoords ? startCoords[0] : 0.0;
+        const abs = Math.abs;
+        let fallbackLat = 0.0;
+        let fallbackLng = 0.0;
+        if (Array.isArray(startCoords) && startCoords.length >= 2) {
+          const p1 = parseFloat(startCoords[0]);
+          const p2 = parseFloat(startCoords[1]);
+          if (abs(p1) <= 90 && abs(p2) > 90) {
+            fallbackLat = p1;
+            fallbackLng = p2;
+          } else {
+            fallbackLat = p2;
+            fallbackLng = p1;
+          }
+        }
         sendSOSWithCoords(fallbackLat, fallbackLng);
       },
       { enableHighAccuracy: true, timeout: 8000 }
