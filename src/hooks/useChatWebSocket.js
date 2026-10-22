@@ -51,13 +51,21 @@ const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => 
 
         const DEFAULT_API_URL = 'https://shakham.francecentral.cloudapp.azure.com/sheconnect-be';
         const rawBaseUrl = (import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? DEFAULT_API_URL : window.location.origin)).trim().replace(/\/+$/, '');
-        const wsUrl = rawBaseUrl.replace(/^http/, 'ws') + `/chat/ws?token=${token}`;
+        // Connect to clean /chat/ws URL without exposing the JWT token in query strings / server access logs
+        const wsUrl = rawBaseUrl.replace(/^http/, 'ws') + '/chat/ws';
         
         try {
             const ws = new WebSocket(wsUrl);
             wsRef.current = ws;
 
             ws.onopen = () => {
+                // Send authentication payload first
+                try {
+                    ws.send(JSON.stringify({ type: 'auth', token }));
+                } catch (e) {
+                    console.warn("Auth payload send failed:", e);
+                }
+
                 setIsConnected(true);
                 reconnectAttempts.current = 0;
 

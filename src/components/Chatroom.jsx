@@ -145,8 +145,10 @@ const Chatroom = ({ partner, onClose, chatState, readOnly = false }) => {
                     </div>
                 )}
 
-                {messages.map((msg, index) => {
-                    const isMe = String(msg.senderId) === String(user?.id || user?.user_id) || msg.senderId === 'me';
+                {messages
+                    .filter((msg) => !String(msg.message || msg.text || '').includes('🚨 EMERGENCY'))
+                    .map((msg, index) => {
+                        const isMe = String(msg.senderId) === String(user?.id || user?.user_id) || msg.senderId === 'me';
 
                     return (
                         <div
