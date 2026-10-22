@@ -82,11 +82,18 @@ const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => 
                         case 'pong':
                             break;
                         case 'message':
+                            console.log("Chat WS received message:", data);
                             setMessages((prev) => {
                                 if (data.chat_id && prev.some((m) => m.chat_id === data.chat_id)) {
                                     return prev;
                                 }
-                                return [...prev, data];
+                                return [...prev, {
+                                    chat_id: data.chat_id,
+                                    senderId: data.senderId,
+                                    message: data.message || data.text || '',
+                                    created_at: data.created_at || new Date().toISOString(),
+                                    status: 'sent'
+                                }];
                             });
                             break;
                         case 'message_sent':

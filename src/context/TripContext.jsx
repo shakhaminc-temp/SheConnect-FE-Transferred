@@ -133,9 +133,21 @@ export const TripProvider = ({ children }) => {
                     
                     if (isConnected) {
                         setTripStatus(TRIP_STATUS.CONNECTED);
+                        const accepted = acceptedSent || acceptedReceived;
+                        const isSent = !!acceptedSent;
                         setConnectedPartner({
-                             id: acceptedSent ? acceptedSent.sent_to : acceptedReceived.sent_by,
-                             request_id: acceptedSent ? acceptedSent.request_id : acceptedReceived.request_id,
+                            id: isSent ? accepted.sent_to : accepted.sent_by,
+                            request_id: accepted.request_id,
+                            privacy_type: isSent
+                                ? (accepted.receiver_privacy_mode === 'DETAILS' ? 'details' : 'anonymous')
+                                : (accepted.sender_privacy_mode === 'DETAILS' ? 'details' : 'anonymous'),
+                            name: accepted.partner_name,
+                            college: accepted.partner_college,
+                            phone: accepted.partner_phone,
+                            anonymous_id: accepted.partner_anonymous_id,
+                            rating: accepted.partner_rating,
+                            start: accepted.partner_start,
+                            end: accepted.partner_end
                         });
                     } else {
                         setTripStatus(TRIP_STATUS.WAITING);
