@@ -115,17 +115,21 @@ const MapLibreMap = ({ startCoords, endCoords, mode = 'route', showSOS = true })
             }
           },
           (error) => {
-            // Silently ignore or warn permissions policy / denied errors
+            // Silently handle permissions policy restriction or user denial without noisy console warnings
             if (error?.code === 1) {
-              console.warn("Geolocation permission not granted or restricted by policy.");
+              // Permission denied or blocked by document Permissions-Policy
+              if (watchIdRef.current !== null) {
+                navigator.geolocation.clearWatch(watchIdRef.current);
+                watchIdRef.current = null;
+              }
             } else {
-              console.warn("Geolocation watch update unavailable:", error?.message);
+              console.debug("Geolocation watch update unavailable:", error?.message);
             }
           },
           { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
         );
       } catch (err) {
-        console.warn("Geolocation watchPosition blocked:", err);
+        // Silently catch permissions policy blocking
       }
     }
 

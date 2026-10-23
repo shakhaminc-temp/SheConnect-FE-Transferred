@@ -41,6 +41,10 @@ const LiveCarpoolConnection = () => {
     const partner = state.partner;
     const role = state.role || 'rider';
 
+    // Normalize partner ID and request ID
+    const partnerUserId = partner?.user_id || partner?.id || partner?.rider_id || partner?.driver_id || (role === 'rider' ? ride?.driver_id : null);
+    const resolvedRequestId = partner?.request_id || partner?.requestId || state.requestId || state.request_id || null;
+
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [startCoords, setStartCoords] = useState(null);
     const [endCoords, setEndCoords] = useState(null);
@@ -66,7 +70,7 @@ const LiveCarpoolConnection = () => {
     const [feedbackRating, setFeedbackRating] = useState(0);
     const [feedbackText, setFeedbackText] = useState('');
 
-    const chatState = useChatWebSocket(partner?.id || partner?.user_id, partner?.request_id, false);
+    const chatState = useChatWebSocket(partnerUserId, resolvedRequestId, false);
 
     // Redirect if no ride context
     useEffect(() => {
@@ -314,7 +318,16 @@ const LiveCarpoolConnection = () => {
                         <div className="space-y-6">
                             {/* Chatroom */}
                             {isChatOpen ? (
-                                <Chatroom partner={partner} onClose={() => setIsChatOpen(false)} chatState={chatState} />
+                                <Chatroom 
+                                    partner={{
+                                        ...partner,
+                                        user_id: partnerUserId,
+                                        id: partnerUserId,
+                                        request_id: resolvedRequestId
+                                    }} 
+                                    onClose={() => setIsChatOpen(false)} 
+                                    chatState={chatState} 
+                                />
                             ) : (
                                 <>
                                     {/* Partner Card */}
@@ -525,6 +538,13 @@ const LiveCarpoolConnection = () => {
                             {chatState.emergencyAlert.realCollege && (
                                 <p className="text-sm font-medium text-gray-600 mt-2">
                                     <span className="font-bold">College:</span> {chatState.emergencyAlert.realCollege}
+                                </p>
+                            )}
+                            {(chatState.emergencyAlert.realPhone || partner?.phone) && (
+                                <p className="text-sm font-medium text-gray-600 mt-2 flex items-center justify-center gap-1.5 text-rose-700">
+                                    <Phone size={14} />
+                                    <span className="font-bold text-gray-700">Phone:</span>
+                                    <span className="font-bold">{chatState.emergencyAlert.realPhone || partner?.phone}</span>
                                 </p>
                             )}
                         </div>
