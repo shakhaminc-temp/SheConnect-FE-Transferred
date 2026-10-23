@@ -688,6 +688,13 @@ const LiveConnection = () => {
                                     <span className="font-bold">College:</span> {chatState.emergencyAlert.realCollege}
                                 </p>
                             )}
+                            {(chatState.emergencyAlert.realPhone || connectedPartner?.phone) && (
+                                <p className="text-sm font-medium text-gray-600 mt-2 flex items-center justify-center gap-1.5 text-rose-700">
+                                    <Phone size={14} />
+                                    <span className="font-bold text-gray-700">Phone:</span>
+                                    <span className="font-bold">{chatState.emergencyAlert.realPhone || connectedPartner?.phone}</span>
+                                </p>
+                            )}
                         </div>
                         <button
                             onClick={() => (chatState.acknowledgeEmergency ? chatState.acknowledgeEmergency() : chatState.setEmergencyAlert(false))}
