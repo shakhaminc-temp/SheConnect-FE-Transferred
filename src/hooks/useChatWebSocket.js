@@ -147,12 +147,16 @@ const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => 
                 setIsConnected(false);
                 if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
                 wsRef.current = null;
-                // Exponential backoff capped at 5 seconds, retrying continuously
-                const timeout = Math.min(5000, 1000 * (1.5 ** Math.min(reconnectAttempts.current, 6)));
-                reconnectAttempts.current += 1;
-                reconnectTimeoutRef.current = setTimeout(() => {
-                    connect();
-                }, timeout);
+                // Try up to 5 times with increasing backoff, then rely peacefully on REST polling without console flooding
+                if (reconnectAttempts.current < 5) {
+                    const timeout = Math.min(10000, 1500 * (2 ** reconnectAttempts.current));
+                    reconnectAttempts.current += 1;
+                    reconnectTimeoutRef.current = setTimeout(() => {
+                        connect();
+                    }, timeout);
+                } else {
+                    console.info("WebSocket unavailable on server. Active chat running smoothly over HTTP REST sync.");
+                }
             };
 
             ws.onerror = () => {
@@ -315,12 +319,27 @@ const useChatWebSocket = (partnerUserId, requestId = null, readOnly = false) => 
                     setMessages((prev) => {
                         const existingIds = new Set(prev.map((m) => m.chat_id).filter(Boolean));
                         const newOnes = sorted.filter((m) => !existingIds.has(m.chat_id));
-                        if (newOnes.length > 0) {
-                            return [...prev, ...newOnes].sort(
-                                (a, b) => new Date(a.created_at) - new Date(b.created_at)
+                        
+                        if (newOnes.length === 0) return prev;
+
+                        // Check if any of the newOnes corresponds to an optimistic pending placeholder
+                        let updated = [...prev];
+                        for (const fresh of newOnes) {
+                            const placeholderIdx = updated.findIndex(
+                                (m) => m.placeholderId && 
+                                       (m.message === fresh.message || m.text === fresh.message)
                             );
+                            if (placeholderIdx !== -1) {
+                                // Replace placeholder with confirmed message
+                                updated[placeholderIdx] = fresh;
+                            } else {
+                                updated.push(fresh);
+                            }
                         }
-                        return prev;
+
+                        return updated.sort(
+                            (a, b) => new Date(a.created_at) - new Date(b.created_at)
+                        );
                     });
                 }
             } catch (e) {
