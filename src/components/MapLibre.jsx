@@ -2,8 +2,9 @@ import React, { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import api from "../api/axios";
+import { triggerSOS } from "../services/sosService";
 
-const MapLibreMap = ({ startCoords, endCoords, mode = 'route', showSOS = true }) => {
+const MapLibreMap = ({ startCoords, endCoords, mode = 'route', showSOS = false, onLiveLocationChange }) => {
   const mapContainer = useRef(null);
   const map = useRef(null);
   const routeAnimationRef = useRef(null);
@@ -91,6 +92,12 @@ const MapLibreMap = ({ startCoords, endCoords, mode = 'route', showSOS = true })
           (position) => {
             const { latitude, longitude } = position.coords;
             const userLngLat = [longitude, latitude];
+            console.log('[MapLibre] Live user GPS update:', latitude, longitude);
+
+            lastLocationRef.current = userLngLat;
+            if (typeof onLiveLocationChange === 'function') {
+              onLiveLocationChange([latitude, longitude]);
+            }
 
             if (!userLocationMarkerRef.current && map.current) {
               userLocationMarkerRef.current = new maplibregl.Marker({ element: createLiveMarkerElement() })
@@ -126,7 +133,7 @@ const MapLibreMap = ({ startCoords, endCoords, mode = 'route', showSOS = true })
               console.debug("Geolocation watch update unavailable:", error?.message);
             }
           },
-          { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+          { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
         );
       } catch (err) {
         // Silently catch permissions policy blocking
@@ -361,58 +368,21 @@ const MapLibreMap = ({ startCoords, endCoords, mode = 'route', showSOS = true })
   }, [startCoords, endCoords]);
 
   const handleSOS = async () => {
-    if (!("geolocation" in navigator)) {
-      alert("Geolocation is not supported by your browser.");
-      return;
-    }
     setSosStatus("sending");
-    
-    const sendSOSWithCoords = async (latitude, longitude) => {
-      try {
-        let locationName = "";
-        try {
-          const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
-          const data = await response.json();
-          locationName = data.display_name || "";
-        } catch (err) {
-          console.error("Reverse geocoding failed:", err);
-        }
-        const res = await api.post("/emergency-contacts/sos", { lat: latitude, lng: longitude, location_name: locationName });
-        setSosStatus("success");
-        alert(res.data?.message || "SOS Alert with live location dispatched to your emergency contacts!");
-        setTimeout(() => setSosStatus("idle"), 4000);
-      } catch (error) {
-        console.error("SOS failed:", error);
-        setSosStatus("error");
-        const errMsg = error.response?.data?.detail || "Failed to send SOS alert. Please check your emergency contacts.";
-        alert(errMsg);
-        setTimeout(() => setSosStatus("idle"), 4000);
-      }
-    };
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        sendSOSWithCoords(position.coords.latitude, position.coords.longitude);
-      },
-      (error) => {
-        const abs = Math.abs;
-        let fallbackLat = 0.0;
-        let fallbackLng = 0.0;
-        if (Array.isArray(startCoords) && startCoords.length >= 2) {
-          const p1 = parseFloat(startCoords[0]);
-          const p2 = parseFloat(startCoords[1]);
-          if (abs(p1) <= 90 && abs(p2) > 90) {
-            fallbackLat = p1;
-            fallbackLng = p2;
-          } else {
-            fallbackLat = p2;
-            fallbackLng = p1;
-          }
-        }
-        sendSOSWithCoords(fallbackLat, fallbackLng);
-      },
-      { enableHighAccuracy: true, timeout: 8000 }
-    );
+    try {
+      // Prioritize the live GPS marker location tracked by the map, or fall back to route coords
+      const fallback = lastLocationRef.current || startCoords;
+      const res = await triggerSOS(fallback);
+      setSosStatus("success");
+      alert(res.message || "🚨 SOS Alert with live location dispatched to your emergency contacts!");
+      setTimeout(() => setSosStatus("idle"), 4000);
+    } catch (error) {
+      console.error("SOS failed:", error);
+      setSosStatus("error");
+      const errMsg = error.message || error.response?.data?.detail || "Failed to send SOS alert. Please check your emergency contacts.";
+      alert(errMsg);
+      setTimeout(() => setSosStatus("idle"), 4000);
+    }
   };
 
   return (

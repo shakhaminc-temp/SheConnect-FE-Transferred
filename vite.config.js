@@ -5,7 +5,14 @@ import tailwindcss from '@tailwindcss/vite'
 // https://vite.dev/config/
 export default defineConfig({
   base: '/sheconnect/',
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss()
+  ],
+  server: {
+    host: true, // Listen on all network addresses (LAN access for mobile testing)
+    port: 5173
+  },
   build: {
     rollupOptions: {
       output: {
@@ -19,4 +26,3 @@ export default defineConfig({
     chunkSizeWarningLimit: 1100
   }
 })
-
