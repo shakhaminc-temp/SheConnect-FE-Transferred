@@ -52,6 +52,7 @@ const LiveConnection = () => {
 
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [startCoords, setStartCoords] = useState(null);
+    const [liveUserCoords, setLiveUserCoords] = useState(null);
     const [endCoords, setEndCoords] = useState(null);
     const [distance, setDistance] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -307,12 +308,15 @@ const LiveConnection = () => {
                             </button>
 
                             {/* SOS Button — always visible during active trip to email emergency contacts */}
-                            <button
-                                onClick={() => emergencyAction(startCoords)}
-                                className="px-6 py-4 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-700 transition-all flex items-center gap-2 shadow-[0_8px_16px_-4px_rgba(225,29,72,0.4)] animate-pulse"
-                            >
-                                <AlertCircle size={16} /> SOS
-                            </button>
+                            {/* SOS Button - only visible once trip starts on the map (both met) */}
+                            {bothMet && (
+                                <button
+                                    onClick={() => emergencyAction(liveUserCoords || startCoords)}
+                                    className="px-6 py-4 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-700 transition-all flex items-center gap-2 shadow-[0_8px_16px_-4px_rgba(225,29,72,0.4)] animate-pulse"
+                                >
+                                    <AlertCircle size={16} /> SOS
+                                </button>
+                            )}
                         </div>
                     </div>
 
@@ -327,7 +331,7 @@ const LiveConnection = () => {
                                             <span className="text-xs font-black uppercase tracking-widest text-gray-700">Active Route</span>
                                         </div>
                                     </div>
-                                    <MapLibreMap startCoords={startCoords} endCoords={endCoords} />
+                                    <MapLibreMap startCoords={startCoords} endCoords={endCoords} onLiveLocationChange={setLiveUserCoords} />
                                 </div>
                             ) : (
                                 <div className="bg-white p-16 rounded-3xl border border-dashed border-gray-200 text-center space-y-4 h-[450px] flex flex-col items-center justify-center">

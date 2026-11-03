@@ -5,6 +5,7 @@ import LocationInput from '../components/LocationInput';
 import MapLibreMap from '../components/MapLibre';
 import Sidebar from '../components/Sidebar';
 import { getCoordsFromLocation } from '../utils/getCoordsFromLocation';
+import api from '../api/axios';
 import PrivacyModal from '../components/common/PrivacyModal';
 import { useTrip, TRIP_STATUS } from '../context/TripContext';
 import { useAuth } from '../context/AuthContext';
@@ -31,6 +32,9 @@ const StartTrip = () => {
     const [transportMode, setTransportMode] = useState('');
     const [transportNo, setTransportNo] = useState('');
     const [fieldErrors, setFieldErrors] = useState({});
+    const [availableModes, setAvailableModes] = useState([]);
+    const [loadingTransit, setLoadingTransit] = useState(false);
+    const [transitCityName, setTransitCityName] = useState('');
 
     // Track if coords were manually set from a suggestion to skip redundant geocoding
     const startFromSuggestion = useRef(false);
@@ -54,6 +58,7 @@ const StartTrip = () => {
                 if (value && value.trim().length > 0) {
                     const cleanValue = value.replace(/\s+/g, '').toUpperCase();
                     switch (transportMode) {
+                        case 'two-wheeler':
                         case 'car':
                         case 'uber/cab':
                         case 'auto-rickshaw':
@@ -117,6 +122,53 @@ const StartTrip = () => {
         const e4 = validateField('transportNo', transportNo);
         return e1 && e2 && e3 && e4;
     };
+
+    
+    // Dynamically fetch active transportation modes based on Start/End location coordinates
+    useEffect(() => {
+        if (!startLocation || startLocation.length < 3) {
+            setAvailableModes([]);
+            setTransitCityName('');
+            return;
+        }
+
+        const fetchTransit = async () => {
+            setLoadingTransit(true);
+            try {
+                let url = `/api/geo/available-transit?location=${encodeURIComponent(startLocation)}&dest_location=${encodeURIComponent(endLocation || '')}`;
+                if (startCoords) {
+                    url += `&lat=${startCoords[0]}&lng=${startCoords[1]}`;
+                }
+                if (endCoords) {
+                    url += `&dest_lat=${endCoords[0]}&dest_lng=${endCoords[1]}`;
+                }
+                const res = await api.get(url);
+                if (res.data?.available_modes) {
+                    setAvailableModes(res.data.available_modes);
+                    setTransitCityName(res.data.detected_city || '');
+                    
+                    // If current selection is not available in this region, reset it
+                    if (transportMode && !res.data.available_modes.some(m => m.id === transportMode)) {
+                        setTransportMode('');
+                    }
+                }
+            } catch (err) {
+                console.warn("Transit detection fallback:", err);
+                // Safe universal fallback
+                setAvailableModes([
+                    { id: 'two-wheeler', name: 'Two-Wheeler / Scooter / Bike', badge: 'Bike Pool' },
+                    { id: 'car', name: 'Personal Car / Carpool', badge: 'Shared Ride' },
+                    { id: 'bus', name: 'Public / State Bus', badge: 'Transit' },
+                    { id: 'auto-rickshaw', name: 'Auto Rickshaw', badge: 'First/Last Mile' }
+                ]);
+            } finally {
+                setLoadingTransit(false);
+            }
+        };
+
+        const timer = setTimeout(fetchTransit, 600);
+        return () => clearTimeout(timer);
+    }, [startLocation, endLocation, startCoords, endCoords]);
 
     // Fetch start coordinates
     useEffect(() => {
@@ -341,27 +393,42 @@ const StartTrip = () => {
 
                                 <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
                                     <div className="space-y-1">
-                                        <label htmlFor="transportMode" className="block text-sm font-bold text-gray-700 ml-1">
-                                            Preferred Transport
-                                        </label>
+                                        <div className="flex items-center justify-between ml-1">
+                                            <label htmlFor="transportMode" className="block text-sm font-bold text-gray-700">
+                                                Preferred Transport
+                                            </label>
+                                            {transitCityName && (
+                                                <span className="text-[11px] font-bold text-pink-600 bg-pink-50 px-2.5 py-0.5 rounded-full border border-pink-100 animate-fadeIn">
+                                                    ✓ Verified for {transitCityName}
+                                                </span>
+                                            )}
+                                        </div>
                                         <div className="relative group">
                                             <select
                                                 id="transportMode"
                                                 value={transportMode}
+                                                disabled={!startLocation || loadingTransit}
                                                 onChange={(e) => {
                                                     setTransportMode(e.target.value);
                                                     validateField('transportMode', e.target.value);
                                                 }}
-                                                className={`w-full pl-5 pr-12 py-3.5 bg-gray-50/50 border rounded-2xl focus:ring-4 outline-none appearance-none transition-all hover:bg-white hover:border-gray-300 ${fieldErrors.transportMode ? 'border-red-500 focus:ring-red-500/10' : 'border-gray-200 focus:ring-pink-500/10 focus:border-pink-500'}`}
+                                                className={`w-full pl-5 pr-12 py-3.5 bg-gray-50/50 border rounded-2xl focus:ring-4 outline-none appearance-none transition-all hover:bg-white hover:border-gray-300 disabled:opacity-60 disabled:cursor-not-allowed ${fieldErrors.transportMode ? 'border-red-500 focus:ring-red-500/10' : 'border-gray-200 focus:ring-pink-500/10 focus:border-pink-500'}`}
                                                 required
                                             >
-                                                <option value="">Choose your mode</option>
-                                                <option value="car">Car</option>
-                                                <option value="bus">Public Bus</option>
-                                                <option value="train">Railway</option>
-                                                <option value="uber/cab">Uber / Ola / Cab</option>
-                                                <option value="auto-rickshaw">Auto Rickshaw</option>
-                                                <option value="metro">Metro Rail</option>
+                                                {!startLocation ? (
+                                                    <option value="">Enter pickup point to detect transit</option>
+                                                ) : loadingTransit ? (
+                                                    <option value="">Detecting local transit modes...</option>
+                                                ) : (
+                                                    <>
+                                                        <option value="">Choose available mode {transitCityName ? `in ${transitCityName}` : ''}</option>
+                                                        {availableModes.map((mode) => (
+                                                            <option key={mode.id} value={mode.id}>
+                                                                {mode.name} ({mode.badge})
+                                                            </option>
+                                                        ))}
+                                                    </>
+                                                )}
                                             </select>
                                             <Truck className="absolute right-4 top-4 text-gray-400 group-focus-within:text-pink-600 transition-colors" size={20} />
                                         </div>

@@ -16,6 +16,7 @@ const MatchMakingModal = ({ isOpen, onClose, tripDetails, onConnect, matches = [
 
     const getTransportGroup = (mode) => {
         const m = normalize(mode);
+        if (['two-wheeler', 'bike', 'scooter', 'activa'].some(opt => m.includes(opt))) return 'two_wheeler';
         if (['car', 'cab', 'uber', 'ola', 'auto'].some(opt => m.includes(opt))) return 'road_private';
         if (['train', 'metro', 'railway'].some(opt => m.includes(opt))) return 'rail';
         if (m.includes('bus')) return 'bus';

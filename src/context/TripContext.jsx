@@ -433,7 +433,14 @@ export const TripProvider = ({ children }) => {
     const triggerTimeout = useCallback(() => setTripStatus(TRIP_STATUS.TIMEOUT), []);
     const emergencyAction = useCallback(async (customFallbackCoords = null) => {
         try {
-            const fallback = customFallbackCoords || (activeTrip?.start ? [activeTrip.start.lng, activeTrip.start.lat] : null);
+            let fallback = customFallbackCoords;
+            if (!fallback && activeTrip) {
+                if (activeTrip.start_lat && activeTrip.start_lng) {
+                    fallback = [activeTrip.start_lat, activeTrip.start_lng];
+                } else if (typeof activeTrip.start === 'object' && activeTrip.start?.lat && activeTrip.start?.lng) {
+                    fallback = [activeTrip.start.lat, activeTrip.start.lng];
+                }
+            }
             const res = await triggerSOS(fallback);
             alert(res.message || "🚨 SOS Alert dispatched to your emergency contacts!");
         } catch (err) {

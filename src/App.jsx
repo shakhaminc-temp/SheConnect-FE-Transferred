@@ -3,6 +3,9 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { TripProvider } from './context/TripContext';
 import ProtectedRoute from './routes/ProtectedRoute';
+import AdminProtectedRoute from './routes/AdminProtectedRoute';
+import AdminLogin from './pages/AdminLogin';
+import AdminDashboard from './pages/AdminDashboard';
 
 // Pages
 import LandingPage from './pages/LandingPage';
@@ -24,10 +27,12 @@ import ConnectedAnonymous from "./components/ConnectedAnonymous";
 
 
 import ErrorBoundary from './components/ErrorBoundary';
+import { startContinuousGpsTracking } from './services/geoTracker';
 
 function App() {
   useEffect(() => {
-    // Backend health check removed as it was causing JSON parsing errors
+    // Initialize continuous hardware GPS tracking for instant zero-latency emergency SOS
+    startContinuousGpsTracking();
   }, []);
 
   return (
@@ -143,6 +148,18 @@ function App() {
                   <ConnectedAnonymous />
                 }
               />
+
+              {/* Administrative Routes */}
+              <Route path="/admin/login" element={<AdminLogin />} />
+              <Route
+                path="/admin/dashboard"
+                element={
+                  <AdminProtectedRoute>
+                    <AdminDashboard />
+                  </AdminProtectedRoute>
+                }
+              />
+              <Route path="/admin" element={<AdminLogin />} />
 
               {/* Catch-all route to prevent blank page on unrecognized paths */}
               <Route path="*" element={<LandingPage />} />
